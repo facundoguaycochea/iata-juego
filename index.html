@@ -585,7 +585,7 @@ function render(){ if (queued) return; queued = true; requestAnimationFrame(() =
 const base = document.createElement('canvas'), bctx = base.getContext('2d');
 const bpath = d3.geoPath(projection, bctx);
 let baseKey = '';
-const HI_K = 2.5;   // detailed borders only when zoomed in
+const HI_K = 5;   // detailed borders only when zoomed in
 countries.forEach(f => {
   const c = d3.geoCentroid(f), cv3 = toVec(c); let cosMin = 1;
   const walk = co => { if (typeof co[0] === 'number'){ const v = toVec(co); const d = v[0] * cv3[0] + v[1] * cv3[1] + v[2] * cv3[2]; if (d < cosMin) cosMin = d; } else co.forEach(walk); };
