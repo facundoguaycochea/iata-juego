@@ -245,7 +245,7 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
   <div class="overlay" id="rankOv" hidden>
     <div class="card">
       <div class="hero"><h1>Ran<em>king</em></h1></div>
-      <p class="tag">Los 15 mejores puntajes. Cada pista y dificultad tiene su propio ranking.</p>
+      <p class="tag">Los 15 mejores puntajes del mundo. Cada pista y dificultad tiene su propio ranking. Si repetís tu nombre, se guarda el puntaje más alto.</p>
       <div class="field"><span>Pista</span>
         <div class="seg" id="rkClue"><button data-v="code">Código IATA</button><button data-v="name">Nombre</button></div></div>
       <div class="field"><span>Dificultad</span>
@@ -897,7 +897,7 @@ function next(){
 }
 
 /* ---------- ranking ---------- */
-const RANK_API = '';   // URL del servidor del ranking mundial. Vacío = ranking guardado solo en este dispositivo.
+const RANK_API = 'https://iata-ranking-api.vercel.app/api/ranking';   // servidor del ranking mundial. Vacío = ranking guardado solo en este dispositivo.
 const RANK_TOP = 15;
 const CLUE_LABEL = { code: 'Código IATA', name: 'Nombre' };
 const DIFF_LABEL = { easy: 'Grandes hubs', mix: 'Mixto', hard: 'Experto' };
@@ -917,7 +917,8 @@ const rankStore = {
         if (r.ok) return sortBoard(await r.json());
       } catch(e){}
     }
-    const list = sortBoard([...(store.get('iata:board:' + key) || []), entry]);
+    const old = store.get('iata:board:' + key) || [], k = entry.n.toLowerCase(), prev = old.find(e => e.n.toLowerCase() === k);
+    const list = sortBoard(!prev ? [...old, entry] : entry.s > prev.s ? old.map(e => e === prev ? { ...entry, n: prev.n } : e) : old);
     store.set('iata:board:' + key, list);
     return list;
   }
@@ -1016,7 +1017,10 @@ function showSummary(){
       const list = await rankStore.save(key, entry);
       $('#sumRank').innerHTML = rankHtml(list, entry.id);
       const pos = list.findIndex(e => e.id === entry.id);
-      $('#sumRankNote').textContent = pos >= 0 ? `Quedaste en el puesto ${pos + 1}.` : `No entraste al top ${RANK_TOP} esta vez.`;
+      const mine = list.find(e => e.n.toLowerCase() === n.toLowerCase());
+      $('#sumRankNote').textContent = pos >= 0 ? `Quedaste en el puesto ${pos + 1}.`
+        : mine ? `Ya tenías ${mine.s} puntos con ese nombre: se mantiene el mayor.`
+        : `No entraste al top ${RANK_TOP} esta vez.`;
       $('#saveBtn').textContent = 'Guardado';
     };
   }
