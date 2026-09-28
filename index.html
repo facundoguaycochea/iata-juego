@@ -47,6 +47,9 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
 .borders{fill:none;stroke:var(--border);stroke-width:.7;vector-effect:non-scaling-stroke;stroke-linejoin:round}
 .lines path{fill:none;stroke-width:2;vector-effect:non-scaling-stroke;stroke-dasharray:5 5;stroke-linecap:round}
 .pins text{font-family:var(--mono);font-weight:600;font-size:12px}
+.dots circle{fill:rgba(255,178,36,.6);stroke:#07111a;stroke-width:.8;pointer-events:none}
+.opt{cursor:pointer}
+.opt text{font-size:14px;font-weight:700;pointer-events:none}
 
 /* ---------- departure board (clue) ---------- */
 .board{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100% - 32px);
@@ -212,7 +215,7 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
 
       <ol class="howto">
         <li><b>01</b><span>5 aeropuertos por partida. Cada partida sale distinta: los códigos aparecen siempre al azar.</span></li>
-        <li><b>02</b><span>Marcá un punto en el mapa (podés hacer zoom y moverlo) y confirmá.</span></li>
+        <li><b>02</b><span>Marcá un punto en el mapa (podés hacer zoom y moverlo) y confirmá. Los puntos amarillos son los aeropuertos del juego. Si dudás, pedí 3 opciones: se marcan A, B y C en el mapa, pero ese vuelo vale la mitad de puntos.</span></li>
         <li><b>03</b><span>Hasta 100 puntos por vuelo. Si acertás 3 de 5 (a menos de 500 km) pasás al siguiente nivel; si no, se termina.</span></li>
       </ol>
     </div>
@@ -495,7 +498,7 @@ function buildRounds(){
 
 /* ---------- state ---------- */
 const HIT_KM = 500, NEED = 3;
-const S = { mode:'practice', clue:'code', rounds:[], i:0, results:[], phase:'menu', guess:null, date:null, level:1, cum:0, used:new Set() };
+const S = { mode:'practice', clue:'code', rounds:[], i:0, results:[], phase:'menu', guess:null, date:null, level:1, cum:0, used:new Set(), hint:null };
 
 /* ---------- map ---------- */
 const stage = $('#stage');
@@ -508,6 +511,7 @@ const borderMesh = topojson.mesh(WORLD, WORLD.objects.countries, (a, b) => a !==
 const landSel = gRoot.append('g').attr('class', 'land').selectAll('path').data(countries).join('path');
 const bordersEl = gRoot.append('path').attr('class', 'borders');
 const gLines = gRoot.append('g').attr('class', 'lines');
+const gDots = svg.append('g').attr('class', 'dots');
 const gPins = svg.append('g').attr('class', 'pins');
 const graticule = d3.geoGraticule10();
 const projection = d3.geoNaturalEarth1();
@@ -517,7 +521,7 @@ let T = d3.zoomIdentity, W = 0, H = 0;
 const zoom = d3.zoom().scaleExtent([1, 60]).on('zoom', e => {
   T = e.transform;
   gRoot.attr('transform', T);
-  drawPins();
+  drawDots(); drawPins();
 });
 svg.call(zoom).on('dblclick.zoom', null);
 
@@ -532,7 +536,7 @@ function layout(){
   landSel.attr('d', geoPath);
   bordersEl.attr('d', geoPath(borderMesh));
   zoom.extent([[0, 0], [W, H]]).translateExtent([[0, 0], [W, H]]);
-  drawLines(); drawPins();
+  drawLines(); drawDots(); drawPins();
 }
 
 let lines = [];   // {a:[lon,lat], b:[lon,lat], color}
@@ -542,12 +546,21 @@ function drawLines(){
     .attr('d', d => geoPath({ type: 'LineString', coordinates: [d.a, d.b] }))
     .attr('stroke', d => d.color);
 }
+function drawDots(){
+  gDots.selectAll('circle').data(AIRPORTS, d => d.code).join('circle').attr('r', 3)
+    .attr('cx', d => T.applyX(projection([d.lon, d.lat])[0]))
+    .attr('cy', d => T.applyY(projection([d.lon, d.lat])[1]));
+}
 function drawPins(){
   const sel = gPins.selectAll('g.pin').data(pins, (d, i) => `${i}-${d.kind}-${d.label || ''}-${d.color || ''}`).join(enter => {
     const g = enter.append('g').attr('class', 'pin');
     g.each(function(d){
       const n = d3.select(this);
-      if (d.kind === 'guess'){
+      if (d.kind === 'opt'){
+        n.classed('opt', true).on('click', ev => { ev.stopPropagation(); pickOption(d.idx); });
+        n.append('circle').attr('r', 17).attr('fill', 'rgba(255,178,36,.14)').attr('stroke', d.color || 'var(--amber)').attr('stroke-width', 2);
+        n.append('text').attr('text-anchor', 'middle').attr('y', 5).attr('fill', d.color || 'var(--amber)').text(d.label);
+      } else if (d.kind === 'guess'){
         n.append('circle').attr('r', 11).attr('fill', 'rgba(116,211,255,.18)');
         n.append('circle').attr('r', 6).attr('fill', 'var(--cyan)').attr('stroke', '#07111a').attr('stroke-width', 2);
       } else {
@@ -588,7 +601,7 @@ function focusOn(coords, maxK = 7){
 function resetView(){ svg.transition().duration(REDUCE ? 0 : 600).call(zoom.transform, d3.zoomIdentity); }
 
 svg.on('click', e => {
-  if (S.phase !== 'guess') return;
+  if (S.phase !== 'guess' || S.hint) return;
   const [x, y] = d3.pointer(e, svg.node());
   const p = T.invert([x, y]);
   const ll = projection.invert(p);
@@ -669,15 +682,20 @@ function esc(s){ return s.replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>
 function renderDock(){
   const dock = $('#dock'); dock.hidden = false;
   if (S.phase === 'guess'){
-    dock.innerHTML = `<p>${S.guess ? '<strong>Marca puesta.</strong> Tocá otro punto para moverla.' : 'Tocá el mapa donde creés que está el aeropuerto.'}</p>
+    const msg = S.hint
+      ? (S.guess ? '<strong>Opción ' + 'ABC'[S.hint.picked] + '.</strong> Podés cambiarla antes de confirmar.' : 'Tocá A, B o C en el mapa. <strong>Este vuelo vale la mitad.</strong>')
+      : (S.guess ? '<strong>Marca puesta.</strong> Tocá otro punto para moverla.' : 'Tocá el mapa donde creés que está el aeropuerto.');
+    dock.innerHTML = `<p>${msg}</p>
+      ${S.hint ? '' : '<button class="ghost" id="hintBtn" title="Marca 3 opciones en el mapa. El puntaje se reduce a la mitad.">3 opciones · ½ puntos</button>'}
       <button class="cta" id="confirmBtn" ${S.guess ? '' : 'disabled'}>Confirmar</button>`;
+    if (!S.hint) $('#hintBtn').onclick = requestOptions;
     $('#confirmBtn').onclick = confirmGuess;
   } else if (S.phase === 'reveal'){
     const r = S.results[S.i];
     const last = S.i === ROUNDS - 1;
     dock.innerHTML = `<div class="res">
         <span class="pts" style="color:${tone(r.pts)}">+${r.pts}</span>
-        <span class="km">Tu marca quedó a <b>${fmt(r.km)} km</b></span>
+        <span class="km">Tu marca quedó a <b>${fmt(r.km)} km</b>${r.hinted ? ' · con opciones (½)' : ''}</span>
         <span class="meter"><i style="width:${r.pts}%;background:${tone(r.pts)}"></i></span>
       </div>
       <button class="cta" id="nextBtn">${last ? 'Ver resultado' : 'Siguiente vuelo'}</button>`;
@@ -694,6 +712,34 @@ function startGame(){
   $('#menu').hidden = true; $('#summary').hidden = true;
   startRound();
 }
+function requestOptions(){
+  if (S.phase !== 'guess' || S.hint) return;
+  const a = S.rounds[S.i];
+  const far = (b, c) => distKm(b, c) > 600;
+  let decoys = [];
+  const pools = [AIRPORTS.filter(b => b.region === a.region), AIRPORTS];
+  for (const pool of pools){
+    const cand = pool.filter(b => b.code !== a.code && far(a, b)).sort(() => Math.random() - .5);
+    for (const b of cand){ if (decoys.length < 2 && decoys.every(c => far(c, b))) decoys.push(b); }
+    if (decoys.length === 2) break;
+  }
+  const opts = [a, ...decoys].sort(() => Math.random() - .5);
+  S.hint = { opts, picked: null };
+  S.guess = null;
+  drawOptionPins();
+  renderDock();
+  resetView();
+}
+function drawOptionPins(){
+  pins = S.hint.opts.map((o, i) => ({ kind: 'opt', idx: i, ll: [o.lon, o.lat], label: 'ABC'[i], color: S.hint.picked === i ? 'var(--cyan)' : undefined }));
+  drawPins();
+}
+function pickOption(i){
+  if (S.phase !== 'guess' || !S.hint) return;
+  S.hint.picked = i;
+  S.guess = [S.hint.opts[i].lon, S.hint.opts[i].lat];
+  drawOptionPins(); renderDock();
+}
 function nextLevel(){
   S.cum += S.results.reduce((s, r) => s + r.pts, 0);
   S.level++;
@@ -701,7 +747,7 @@ function nextLevel(){
   startRound();
 }
 function startRound(){
-  $('#summary').hidden = true;
+  $('#summary').hidden = true; S.hint = null;
   S.phase = 'guess'; S.guess = null; lines = []; pins = [];
   landSel.classed('hit', false);
   drawLines(); drawPins();
@@ -712,8 +758,9 @@ function confirmGuess(){
   if (!S.guess) return;
   const a = S.rounds[S.i];
   const g = { lon: S.guess[0], lat: S.guess[1] };
-  const km = distKm(g, a), pts = points(km);
-  S.results[S.i] = { code: a.code, km, pts, guess: S.guess };
+  const hinted = !!S.hint;
+  const km = distKm(g, a), pts = hinted ? Math.round(points(km) / 2) : points(km);
+  S.results[S.i] = { code: a.code, km, pts, guess: S.guess, hinted };
   S.phase = 'reveal';
   const real = [a.lon, a.lat];
   lines = [{ a: S.guess, b: real, color: tone(pts) }];
@@ -760,7 +807,7 @@ function showSummary(){
     <div class="rows">${S.results.map(r => { const a = byCode[r.code]; return `
       <div class="row"><i style="background:${tone(r.pts)}"></i><span class="c">${a.code}</span>
         <span class="n">${esc(a.city)}<small>${esc(a.name)}</small></span>
-        <span class="d">${fmt(r.km)} km</span><span class="p" style="color:${tone(r.pts)}">${r.pts}</span></div>`; }).join('')}
+        <span class="d">${fmt(r.km)} km${r.hinted ? ' ½' : ''}</span><span class="p" style="color:${tone(r.pts)}">${r.pts}</span></div>`; }).join('')}
     </div>
     <div class="actions">
       ${passed ? '<button class="cta" id="nextLvlBtn">Seguir al nivel ' + (S.level + 1) + '</button>' : ''}
@@ -818,7 +865,6 @@ document.addEventListener('keydown', e => {
 let rs; new ResizeObserver(() => { clearTimeout(rs); rs = setTimeout(layout, 60); }).observe(stage);
 layout();
 // the menu opens over a map that already shows where the game takes place
-pins = AIRPORTS.filter(a => a.tier === 1).map(a => ({ ll: [a.lon, a.lat], kind: 'real', color: 'rgba(255,178,36,.55)' }));
-drawPins();
+drawDots();
 syncMenu(); renderHud();
 </script>
