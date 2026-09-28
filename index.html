@@ -978,7 +978,7 @@ function showSummary(){
        <p class="next" style="margin:-8px 0 14px">Acierto = a menos de ${HIT_KM} km. Necesitás ${NEED} de 5 para seguir. Puntos: ${run}</p>`;
   const save = done && S.ranked ? `
     <div class="save" id="saveBox">
-      <div class="eyebrow">Ranking mundial · ${CLUE_LABEL[S.clue]} · ${DIFF_LABEL[S.diff]}</div>
+      <div class="eyebrow">Ranking${RANK_API ? " mundial" : ""} · ${CLUE_LABEL[S.clue]} · ${DIFF_LABEL[S.diff]}</div>
       <form id="saveForm"><input id="nick" maxlength="14" placeholder="Tu nick o nombre" autocomplete="nickname" value="${esc(store.get('iata:nick') || '')}">
         <button class="cta" id="saveBtn" type="submit">Guardar</button></form>
       <ol class="rank-list" id="sumRank"></ol><p class="note" id="sumRankNote"></p>
