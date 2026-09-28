@@ -49,6 +49,23 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
 .lines path{fill:none;stroke-width:2;vector-effect:non-scaling-stroke;stroke-dasharray:5 5;stroke-linecap:round}
 .pins text{font-family:var(--mono);font-weight:600;font-size:12px}
 .dots circle{fill:rgba(255,178,36,.6);stroke:#07111a;stroke-width:.8;pointer-events:none}
+.timer{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.timer #tnum{font-family:var(--mono);font-weight:600;font-size:14px;min-width:38px;font-variant-numeric:tabular-nums}
+.tbar{flex:1;height:5px;border-radius:3px;background:var(--panel2);overflow:hidden}
+.tbar i{display:block;height:100%;width:100%;background:var(--amber)}
+.start2{width:100%;margin-top:8px;padding:11px;font-size:18px}
+.rank-list{list-style:none;margin:8px 0 6px;padding:0;display:grid;border-top:1px solid var(--line)}
+.rank-list li{display:grid;grid-template-columns:30px 1fr auto auto;gap:10px;align-items:baseline;padding:7px 4px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+.rank-list li.empty{display:block;color:var(--muted);text-align:center;padding:14px 0;font-size:16px}
+.rank-list li.me{background:rgba(255,178,36,.12)}
+.rank-list .pos{font-family:var(--mono);color:var(--amber);font-weight:600}
+.rank-list .nm{font-size:18px;font-weight:600;overflow-wrap:anywhere}
+.rank-list .lv{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.rank-list .sc{font-size:20px;font-weight:800}
+.save{margin:0 0 16px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel2)}
+.save form{display:flex;gap:8px;margin:8px 0 6px}
+.save input{flex:1;min-width:0;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:10px 12px;font:600 18px var(--display)}
+.save .cta{padding:10px 16px;font-size:17px}
 .opt{cursor:pointer}
 .opt text{font-size:14px;font-weight:700;pointer-events:none}
 
@@ -169,6 +186,7 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
 
   <div class="board" id="board" hidden>
     <div class="board-top"><span id="boardLeft">Vuelo 1/5</span><b id="boardRight">Destino</b></div>
+    <div class="timer" id="timer"><span id="tnum">12 s</span><div class="tbar"><i id="tbar"></i></div></div>
     <div class="flaps" id="flaps"></div>
     <div class="board-sub" id="boardSub" hidden></div>
   </div>
@@ -212,13 +230,29 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
           </div>
         </div>
       </div>
+      <p class="note" id="rankMenuNote"></p>
       <button class="cta start" id="startBtn">Despegar</button>
+      <button class="ghost start2" id="rankBtn">Ver ranking</button>
 
       <ol class="howto">
-        <li><b>01</b><span>5 aeropuertos por partida. Cada partida sale distinta: los códigos aparecen siempre al azar.</span></li>
+        <li><b>01</b><span>5 aeropuertos por nivel y solo 12 segundos para cada uno. Cada partida sale distinta: los códigos aparecen siempre al azar.</span></li>
         <li><b>02</b><span>Marcá un punto en el mapa (podés hacer zoom y moverlo) y confirmá. Los puntos amarillos son los aeropuertos del juego. Arrastrá el globo para girarlo. Si dudás, pedí 3 opciones (máximo 2 por nivel): se marcan A, B y C en el globo, pero ese vuelo vale la mitad de puntos.</span></li>
         <li><b>03</b><span>Hasta 100 puntos por vuelo. Si acertás 3 de 5 (a menos de 500 km) pasás al siguiente nivel; si no, se termina.</span></li>
       </ol>
+    </div>
+  </div>
+
+  <div class="overlay" id="rankOv" hidden>
+    <div class="card">
+      <div class="hero"><h1>Ran<em>king</em></h1></div>
+      <p class="tag">Los 15 mejores puntajes. Cada pista y dificultad tiene su propio ranking.</p>
+      <div class="field"><span>Pista</span>
+        <div class="seg" id="rkClue"><button data-v="code">Código IATA</button><button data-v="name">Nombre</button></div></div>
+      <div class="field"><span>Dificultad</span>
+        <div class="seg" id="rkDiff"><button data-v="easy">Grandes hubs</button><button data-v="mix">Mixto</button><button data-v="hard">Experto</button></div></div>
+      <ol class="rank-list" id="rkList"></ol>
+      <p class="note" id="rkNote"></p>
+      <button class="ghost start2" id="rkClose">Volver</button>
     </div>
   </div>
 
@@ -540,10 +574,11 @@ function draw(){
   ctx.beginPath(); path(borderMesh); ctx.strokeStyle = C.border; ctx.lineWidth = .7; ctx.stroke();
   ctx.beginPath(); path({ type: 'Sphere' }); ctx.strokeStyle = 'rgba(116,211,255,.4)'; ctx.lineWidth = 1.2; ctx.stroke();
 
-  ctx.fillStyle = 'rgba(255,178,36,.7)'; ctx.strokeStyle = '#07111a'; ctx.lineWidth = .8;
+  const dr = 5.5 + Math.min(2.5, Math.log2(V.k) * .7);
+  ctx.fillStyle = 'rgba(255,178,36,.92)'; ctx.strokeStyle = '#07111a'; ctx.lineWidth = 1.2;
   for (const a of AIRPORTS){
     const ll = [a.lon, a.lat]; if (!facing(ll)) continue;
-    const p = projection(ll); ctx.beginPath(); ctx.arc(p[0], p[1], 3, 0, 7); ctx.fill(); ctx.stroke();
+    const p = projection(ll); ctx.beginPath(); ctx.arc(p[0], p[1], dr, 0, 7); ctx.fill(); ctx.stroke();
   }
   ctx.setLineDash([5, 5]); ctx.lineWidth = 2; ctx.lineCap = 'round';
   for (const l of lines){ ctx.beginPath(); path({ type: 'LineString', coordinates: [l.a, l.b] }); ctx.strokeStyle = col(l.color); ctx.stroke(); }
@@ -721,6 +756,7 @@ function renderHud(){
 function renderBoard(){
   const a = S.rounds[S.i];
   $('#board').hidden = false;
+  $('#timer').hidden = S.phase !== 'guess';
   $('#boardLeft').textContent = `Nivel ${S.level} · Vuelo ${S.i + 1}/${ROUNDS}`;
   $('#boardRight').textContent = S.clue === 'code' ? 'Código IATA' : 'Aeropuerto';
   renderFlaps(S.clue === 'code' ? a.code : a.name, S.clue !== 'code');
@@ -738,8 +774,8 @@ function renderDock(){
   const dock = $('#dock'); dock.hidden = false;
   if (S.phase === 'guess'){
     const msg = S.hint
-      ? (S.guess ? '<strong>Opción ' + 'ABC'[S.hint.picked] + '.</strong> Podés cambiarla antes de confirmar.' : 'Tocá A, B o C en el mapa. <strong>Este vuelo vale la mitad.</strong>')
-      : (S.guess ? '<strong>Marca puesta.</strong> Tocá otro punto para moverla.' : 'Tocá el mapa donde creés que está el aeropuerto.');
+      ? (S.guess ? '<strong>Opción ' + 'ABC'[S.hint.picked] + '.</strong> Podés cambiarla antes de confirmar.' : 'Tocá A, B o C en el globo. <strong>Este vuelo vale la mitad.</strong>')
+      : (S.guess ? '<strong>Marca puesta.</strong> Tocá otro punto para moverla.' : 'Tocá el globo donde creés que está el aeropuerto.');
     dock.innerHTML = `<p>${msg}</p>
       ${S.hint || S.hintsLeft <= 0 ? '' : '<button class="ghost" id="hintBtn" title="Marca 3 opciones en el globo. El puntaje se reduce a la mitad.">3 opciones · ½ puntos (' + S.hintsLeft + ')</button>'}
       <button class="cta" id="confirmBtn" ${S.guess ? '' : 'disabled'}>Confirmar</button>`;
@@ -748,9 +784,10 @@ function renderDock(){
   } else if (S.phase === 'reveal'){
     const r = S.results[S.i];
     const last = S.i === ROUNDS - 1;
+    const info = r.timeout ? '<b>Se acabó el tiempo</b>' : `Tu marca quedó a <b>${fmt(r.km)} km</b>${r.hinted ? ' · con opciones (½)' : ''}`;
     dock.innerHTML = `<div class="res">
         <span class="pts" style="color:${tone(r.pts)}">+${r.pts}</span>
-        <span class="km">Tu marca quedó a <b>${fmt(r.km)} km</b>${r.hinted ? ' · con opciones (½)' : ''}</span>
+        <span class="km">${info}</span>
         <span class="meter"><i style="width:${r.pts}%;background:${tone(r.pts)}"></i></span>
       </div>
       <button class="cta" id="nextBtn">${last ? 'Ver resultado' : 'Siguiente vuelo'}</button>`;
@@ -763,6 +800,7 @@ function renderDock(){
 function startGame(){
   S.mode = 'practice'; S.clue = prefs.clue; S.date = todayKey();
   S.level = 1; S.cum = 0; S.used.clear(); S.hintsLeft = 2;
+  S.diff = prefs.diff; S.ranked = prefs.region === 'all'; S.finished = false; S.saved = false;
   S.rounds = buildRounds(); S.i = 0; S.results = []; S.guess = null;
   $('#menu').hidden = true; $('#summary').hidden = true;
   startRound();
@@ -802,6 +840,26 @@ function nextLevel(){
   S.rounds = buildRounds(); S.i = 0; S.results = []; S.guess = null;
   startRound();
 }
+/* ---------- timer ---------- */
+const TIME_LIMIT = 12;   // seconds per airport
+let tEnd = 0, tInt = 0;
+function stopTimer(){ clearInterval(tInt); tInt = 0; }
+function startTimer(){
+  stopTimer(); tEnd = performance.now() + TIME_LIMIT * 1000;
+  tInt = setInterval(tick, 100); tick();
+}
+function tick(){
+  const left = Math.max(0, (tEnd - performance.now()) / 1000);
+  const bar = $('#tbar'), num = $('#tnum');
+  bar.style.width = (left / TIME_LIMIT * 100) + '%';
+  bar.style.background = left < 5 ? 'var(--bad)' : left < 10 ? 'var(--meh)' : 'var(--amber)';
+  num.textContent = Math.ceil(left) + ' s';
+  num.style.color = left < 5 ? 'var(--bad)' : '';
+  if (left <= 0){ stopTimer(); if (S.phase === 'guess') confirmGuess(); }
+}
+const isHit = r => r.km != null && r.km <= HIT_KM;
+
+/* ---------- flow ---------- */
 function startRound(){
   $('#summary').hidden = true; S.hint = null;
   S.phase = 'guess'; S.guess = null; lines = []; pins = [];
@@ -809,75 +867,160 @@ function startRound(){
   render();
   renderHud(); renderBoard(); renderDock();
   resetView();
+  startTimer();
 }
 function confirmGuess(){
-  if (!S.guess) return;
-  const a = S.rounds[S.i];
-  const g = { lon: S.guess[0], lat: S.guess[1] };
-  const hinted = !!S.hint;
-  const km = distKm(g, a), pts = hinted ? Math.round(points(km) / 2) : points(km);
-  S.results[S.i] = { code: a.code, km, pts, guess: S.guess, hinted };
+  if (S.phase !== 'guess') return;
+  stopTimer();
+  const a = S.rounds[S.i], real = [a.lon, a.lat], hinted = !!S.hint;
+  let km = null, pts = 0;
+  if (S.guess){
+    km = distKm({ lon: S.guess[0], lat: S.guess[1] }, a);
+    pts = hinted ? Math.round(points(km) / 2) : points(km);
+  }
+  S.results[S.i] = { code: a.code, km, pts, guess: S.guess, hinted, timeout: !S.guess };
   S.phase = 'reveal';
-  const real = [a.lon, a.lat];
-  lines = [{ a: S.guess, b: real, color: tone(pts) }];
-  pins = [{ ll: S.guess, kind: 'guess' }, { ll: real, kind: 'real', label: a.code }];
+  lines = S.guess ? [{ a: S.guess, b: real, color: tone(pts) }] : [];
+  pins = (S.guess ? [{ ll: S.guess, kind: 'guess' }] : []).concat([{ ll: real, kind: 'real', label: a.code }]);
   hitFeat = countries.find(d => d3.geoContains(d, real)) || null;
   render();
   renderHud(); renderBoard(); renderDock();
-  const mid = d3.geoInterpolate(S.guess, real)(0.5);
-  focusOn(km < 20 ? [real] : [S.guess, real, mid], km < 20 ? 14 : 30);
+  if (!S.guess) focusOn([real], 8);
+  else {
+    const mid = d3.geoInterpolate(S.guess, real)(0.5);
+    focusOn(km < 20 ? [real] : [S.guess, real, mid], km < 20 ? 14 : 30);
+  }
 }
 function next(){
   if (S.i < ROUNDS - 1){ S.i++; startRound(); }
   else showSummary();
 }
 
+/* ---------- ranking ---------- */
+const RANK_API = '';   // URL del servidor del ranking mundial. Vacío = ranking guardado solo en este dispositivo.
+const RANK_TOP = 15;
+const CLUE_LABEL = { code: 'Código IATA', name: 'Nombre' };
+const DIFF_LABEL = { easy: 'Grandes hubs', mix: 'Mixto', hard: 'Experto' };
+const boardKey = (clue, diff) => `${clue}:${diff}`;
+const sortBoard = list => list.sort((x, y) => y.s - x.s || y.l - x.l || x.t - y.t).slice(0, RANK_TOP);
+const rankStore = {
+  async load(key){
+    if (RANK_API){
+      try { const r = await fetch(`${RANK_API}?board=${encodeURIComponent(key)}`); if (r.ok) return sortBoard(await r.json()); } catch(e){}
+    }
+    return sortBoard(store.get('iata:board:' + key) || []);
+  },
+  async save(key, entry){
+    if (RANK_API){
+      try {
+        const r = await fetch(RANK_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ board: key, entry }) });
+        if (r.ok) return sortBoard(await r.json());
+      } catch(e){}
+    }
+    const list = sortBoard([...(store.get('iata:board:' + key) || []), entry]);
+    store.set('iata:board:' + key, list);
+    return list;
+  }
+};
+function rankHtml(list, mine){
+  if (!list.length) return '<li class="empty">Todavía no hay puntajes. Serás el primero.</li>';
+  return list.map((e, i) => `<li class="${e.id === mine ? 'me' : ''}"><b class="pos">${i + 1}</b><span class="nm">${esc(e.n)}</span><span class="lv">Nv ${e.l}</span><span class="sc">${e.s}</span></li>`).join('');
+}
+const rankNote = () => RANK_API ? 'Ranking mundial.' : 'Por ahora este ranking se guarda solo en este dispositivo.';
+async function openRanking(clue, diff){
+  RK.clue = clue || RK.clue; RK.diff = diff || RK.diff;
+  $('#rankOv').hidden = false;
+  document.querySelectorAll('#rkClue button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === RK.clue)));
+  document.querySelectorAll('#rkDiff button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === RK.diff)));
+  $('#rkList').innerHTML = '<li class="empty">Cargando…</li>';
+  const key = boardKey(RK.clue, RK.diff), list = await rankStore.load(key);
+  if (key === boardKey(RK.clue, RK.diff)) $('#rkList').innerHTML = rankHtml(list);
+  $('#rkNote').textContent = rankNote();
+}
+const RK = { clue: 'code', diff: 'mix' };
+document.querySelectorAll('#rkClue button').forEach(b => b.onclick = () => openRanking(b.dataset.v, null));
+document.querySelectorAll('#rkDiff button').forEach(b => b.onclick = () => openRanking(null, b.dataset.v));
+$('#rkClose').onclick = () => { $('#rankOv').hidden = true; };
+$('#rankBtn').onclick = () => openRanking(prefs.clue, prefs.diff);
+
 function shareText(){
   const total = S.results.reduce((s, r) => s + r.pts, 0);
-  const d = S.date.split('-').reverse().join('/');
-  const head = 'IATA Juego';
+  const run = S.finished ? S.cum : S.cum + total;
   const clue = S.clue === 'code' ? 'código IATA' : 'nombre';
-  return `${head} ✈ ${clue}\nNivel ${S.level} · ${S.cum + total} pts · ${S.results.filter(r => r.km <= HIT_KM).length}/5 aciertos\n` +
+  return `IATA Juego ✈ ${clue} · ${DIFF_LABEL[S.diff]}\nNivel ${S.level} · ${run} pts · ${S.results.filter(isHit).length}/5 aciertos\n` +
     S.results.map(r => `${emoji(r.pts)} ${r.code} ${String(r.pts).padStart(3, ' ')}`).join('\n');
 }
 
-let countdownTimer = 0;
 function showSummary(){
-  S.phase = 'done';
+  S.phase = 'done'; stopTimer();
   $('#menu').hidden = true; $('#board').hidden = true; $('#dock').hidden = true;
   const byCode = Object.fromEntries(AIRPORTS.map(a => [a.code, a]));
   const total = S.results.reduce((s, r) => s + r.pts, 0);
-  const hits = S.results.filter(r => r.km <= HIT_KM).length, passed = hits >= NEED;
-  lines = S.results.map(r => ({ a: r.guess, b: [byCode[r.code].lon, byCode[r.code].lat], color: tone(r.pts) }));
-  pins = S.results.flatMap(r => [{ ll: r.guess, kind: 'guess' }, { ll: [byCode[r.code].lon, byCode[r.code].lat], kind: 'real', label: r.code, color: tone(r.pts) }]);
+  const hits = S.results.filter(isHit).length, passed = hits >= NEED;
+  const done = !passed || S.finished;
+  const run = S.finished ? S.cum : S.cum + total;
+  lines = S.results.filter(r => r.guess).map(r => ({ a: r.guess, b: [byCode[r.code].lon, byCode[r.code].lat], color: tone(r.pts) }));
+  pins = S.results.flatMap(r => (r.guess ? [{ ll: r.guess, kind: 'guess' }] : []).concat([{ ll: [byCode[r.code].lon, byCode[r.code].lat], kind: 'real', label: r.code, color: tone(r.pts) }]));
   hitFeat = null;
   render(); renderHud();
 
-  const d = new Date(S.date + 'T12:00:00');
-  const dateLabel = d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
-  $('#summaryCard').innerHTML = `
-    <div class="eyebrow">Nivel ${S.level} · ${S.clue === 'code' ? 'Código IATA' : 'Nombre'}</div>
-    <div class="total"><b>${hits}</b><span>/ 5 aciertos</span></div>
-    <p class="rank" style="color:${passed ? 'var(--good)' : 'var(--bad)'}">${passed ? 'Nivel ' + S.level + ' superado' : 'Fin del juego'}</p>
-    <p class="next" style="margin:-8px 0 14px">Acierto = a menos de ${HIT_KM} km. Necesitás ${NEED} de 5 para seguir. Puntos: ${S.cum + total}</p>
-    <div class="rows">${S.results.map(r => { const a = byCode[r.code]; return `
+  const key = boardKey(S.clue, S.diff);
+  const rows = S.results.map(r => { const a = byCode[r.code]; return `
       <div class="row"><i style="background:${tone(r.pts)}"></i><span class="c">${a.code}</span>
         <span class="n">${esc(a.city)}<small>${esc(a.name)}</small></span>
-        <span class="d">${fmt(r.km)} km${r.hinted ? ' ½' : ''}</span><span class="p" style="color:${tone(r.pts)}">${r.pts}</span></div>`; }).join('')}
-    </div>
+        <span class="d">${r.timeout ? 'sin tiempo' : fmt(r.km) + ' km' + (r.hinted ? ' ½' : '')}</span><span class="p" style="color:${tone(r.pts)}">${r.pts}</span></div>`; }).join('');
+  const head = done
+    ? `<div class="total"><b>${run}</b><span>puntos</span></div>
+       <p class="rank" style="color:var(--amber)">${rank(run / (S.level))} · nivel ${S.level}</p>
+       <p class="next" style="margin:-8px 0 14px">${hits}/5 aciertos en este nivel${passed ? '' : ' (hacían falta ' + NEED + ')'}.</p>`
+    : `<div class="total"><b>${hits}</b><span>/ 5 aciertos</span></div>
+       <p class="rank" style="color:var(--good)">Nivel ${S.level} superado</p>
+       <p class="next" style="margin:-8px 0 14px">Acierto = a menos de ${HIT_KM} km. Necesitás ${NEED} de 5 para seguir. Puntos: ${run}</p>`;
+  const save = done && S.ranked ? `
+    <div class="save" id="saveBox">
+      <div class="eyebrow">Ranking mundial · ${CLUE_LABEL[S.clue]} · ${DIFF_LABEL[S.diff]}</div>
+      <form id="saveForm"><input id="nick" maxlength="14" placeholder="Tu nick o nombre" autocomplete="nickname" value="${esc(store.get('iata:nick') || '')}">
+        <button class="cta" id="saveBtn" type="submit">Guardar</button></form>
+      <ol class="rank-list" id="sumRank"></ol><p class="note" id="sumRankNote"></p>
+    </div>` : (done ? '<p class="next">Jugaste con una región elegida: esta partida no entra al ranking.</p>' : '');
+  $('#summaryCard').innerHTML = `
+    <div class="eyebrow">Nivel ${S.level} · ${CLUE_LABEL[S.clue]} · ${DIFF_LABEL[S.diff]}</div>
+    ${head}
+    <div class="rows">${rows}</div>
+    ${save}
     <div class="actions">
-      ${passed ? '<button class="cta" id="nextLvlBtn">Seguir al nivel ' + (S.level + 1) + '</button>' : ''}
-      <button class="${passed ? 'ghost' : 'cta'}" id="shareBtn">Copiar resultado</button>
-      <button class="ghost" id="againBtn">${passed ? 'Empezar de nuevo' : 'Jugar otra vez'}</button>
+      ${passed && !S.finished ? '<button class="cta" id="nextLvlBtn">Seguir al nivel ' + (S.level + 1) + '</button>' : ''}
+      ${passed && !S.finished && S.ranked ? '<button class="ghost" id="finishBtn">Terminar y guardar</button>' : ''}
+      <button class="${done && !S.ranked ? 'cta' : 'ghost'}" id="shareBtn">Copiar resultado</button>
+      <button class="ghost" id="againBtn">${done ? 'Jugar otra vez' : 'Empezar de nuevo'}</button>
       <button class="ghost" id="toMenuBtn">Menú</button>
     </div>
     <textarea id="copyArea" readonly hidden></textarea>`;
   $('#summary').hidden = false;
-  if (passed) $('#nextLvlBtn').onclick = nextLevel;
+  if ($('#nextLvlBtn')) $('#nextLvlBtn').onclick = nextLevel;
+  if ($('#finishBtn')) $('#finishBtn').onclick = () => { S.cum += total; S.finished = true; showSummary(); };
   $('#shareBtn').onclick = share;
   $('#againBtn').onclick = startGame;
   $('#toMenuBtn').onclick = openMenu;
-  requestAnimationFrame(() => focusOn(lines.flatMap(l => [l.a, l.b]), 4));
+  if (done && S.ranked){
+    rankStore.load(key).then(list => { const el = $('#sumRank'); if (el && !S.saved) el.innerHTML = rankHtml(list); });
+    $('#sumRankNote').textContent = rankNote();
+    $('#saveForm').onsubmit = async ev => {
+      ev.preventDefault();
+      if (S.saved) return;
+      const n = $('#nick').value.trim().slice(0, 14);
+      if (!n){ $('#nick').focus(); return; }
+      store.set('iata:nick', n);
+      S.saved = true; $('#saveBtn').disabled = true; $('#nick').disabled = true;
+      const entry = { id: Date.now() + '-' + Math.random().toString(36).slice(2, 7), n, s: run, l: S.level, t: Date.now() };
+      const list = await rankStore.save(key, entry);
+      $('#sumRank').innerHTML = rankHtml(list, entry.id);
+      const pos = list.findIndex(e => e.id === entry.id);
+      $('#sumRankNote').textContent = pos >= 0 ? `Quedaste en el puesto ${pos + 1}.` : `No entraste al top ${RANK_TOP} esta vez.`;
+      $('#saveBtn').textContent = 'Guardado';
+    };
+  }
+  requestAnimationFrame(() => focusOn(pins.map(p => p.ll), 4));
 }
 function share(){
   const text = shareText();
@@ -892,7 +1035,13 @@ function toast(msg){
 
 /* ---------- menu ---------- */
 function savePrefs(){ store.set('iata:prefs', prefs); }
+function updateRankNote(){
+  const el = $('#rankMenuNote'); if (!el) return;
+  if (prefs.region === 'all'){ el.textContent = 'Esta partida entra al ranking: ' + CLUE_LABEL[prefs.clue] + ' · ' + DIFF_LABEL[prefs.diff]; el.style.color = 'var(--good)'; }
+  else { el.textContent = 'Con una región elegida no se guarda en el ranking.'; el.style.color = 'var(--muted)'; }
+}
 function syncMenu(){
+  updateRankNote();
   document.querySelectorAll('.seg').forEach(seg => {
     const key = seg.dataset.key;
     seg.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(prefs[key] === b.dataset.v)));
@@ -903,7 +1052,7 @@ document.querySelectorAll('.seg').forEach(seg => seg.addEventListener('click', e
   prefs[seg.dataset.key] = b.dataset.v; savePrefs(); syncMenu();
 }));
 function openMenu(){
-  S.phase = 'menu';
+  S.phase = 'menu'; stopTimer();
   $('#summary').hidden = true; $('#board').hidden = true; $('#dock').hidden = true;
   $('#menu').hidden = false;
   syncMenu();
@@ -913,6 +1062,7 @@ $('#menuBtn').onclick = openMenu;
 
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter' || e.target.tagName === 'BUTTON') return;
+  if (e.target.tagName === 'INPUT') return;
   if (S.phase === 'guess' && S.guess) confirmGuess();
   else if (S.phase === 'reveal') next();
 });
