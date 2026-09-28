@@ -581,24 +581,54 @@ function nearestAirport(x, y, r){
 
 let queued = false;
 function render(){ if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; draw(); }); }
-function draw(){
-  projection.scale(R0 * V.k).translate([V.cx, V.cy]).rotate(V.rot).precision(interacting ? 2 : 0.5);
-  cvec = toVec(centre());
-  const r = R0 * V.k, GF = interacting ? countriesLo : countries, GM = interacting ? borderLo : borderMesh;
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  ctx.clearRect(0, 0, W, H);
-  ctx.lineJoin = 'round';
-  const glow = ctx.createRadialGradient(V.cx, V.cy, r * .97, V.cx, V.cy, r * 1.14);
+/* the globe itself is drawn into an off-screen canvas and only redrawn when the view moves */
+const base = document.createElement('canvas'), bctx = base.getContext('2d');
+const bpath = d3.geoPath(projection, bctx);
+let baseKey = '';
+const HI_K = 2.5;   // detailed borders only when zoomed in
+countries.forEach(f => {
+  const c = d3.geoCentroid(f), cv3 = toVec(c); let cosMin = 1;
+  const walk = co => { if (typeof co[0] === 'number'){ const v = toVec(co); const d = v[0] * cv3[0] + v[1] * cv3[1] + v[2] * cv3[2]; if (d < cosMin) cosMin = d; } else co.forEach(walk); };
+  walk(f.geometry.coordinates);
+  f._v = cv3; f._rad = Math.acos(Math.max(-1, cosMin));
+});
+function drawBase(useHi){
+  const r = R0 * V.k;
+  bctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  bctx.clearRect(0, 0, W, H);
+  bctx.lineJoin = 'round';
+  const glow = bctx.createRadialGradient(V.cx, V.cy, r * .97, V.cx, V.cy, r * 1.14);
   glow.addColorStop(0, 'rgba(116,211,255,.30)'); glow.addColorStop(1, 'rgba(116,211,255,0)');
-  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(V.cx, V.cy, r * 1.14, 0, 7); ctx.fill();
-  const og = ctx.createRadialGradient(V.cx - r * .35, V.cy - r * .4, r * .05, V.cx, V.cy, r);
+  bctx.fillStyle = glow; bctx.beginPath(); bctx.arc(V.cx, V.cy, r * 1.14, 0, 7); bctx.fill();
+  const og = bctx.createRadialGradient(V.cx - r * .35, V.cy - r * .4, r * .05, V.cx, V.cy, r);
   og.addColorStop(0, C.ocean2); og.addColorStop(1, C.ocean);
-  ctx.beginPath(); path({ type: 'Sphere' }); ctx.fillStyle = og; ctx.fill();
-  ctx.beginPath(); path(graticule); ctx.strokeStyle = C.grat; ctx.lineWidth = .6; ctx.stroke();
-  ctx.beginPath(); GF.forEach(f => path(f)); ctx.fillStyle = C.land; ctx.fill();
-  if (hitFeat){ ctx.beginPath(); path(hitFeat); ctx.fillStyle = C.hit; ctx.fill(); }
-  ctx.beginPath(); path(GM); ctx.strokeStyle = C.border; ctx.lineWidth = .7; ctx.stroke();
-  ctx.beginPath(); path({ type: 'Sphere' }); ctx.strokeStyle = 'rgba(116,211,255,.4)'; ctx.lineWidth = 1.2; ctx.stroke();
+  bctx.beginPath(); bpath({ type: 'Sphere' }); bctx.fillStyle = og; bctx.fill();
+  bctx.beginPath(); bpath(graticule); bctx.strokeStyle = C.grat; bctx.lineWidth = .6; bctx.stroke();
+  if (useHi){
+    // keep only the countries that can be on screen
+    const D = Math.hypot(W, H), theta = D >= r ? Math.PI : Math.asin(D / r) + .05;
+    const vis = countries.filter(f => Math.acos(Math.max(-1, Math.min(1, f._v[0] * cvec[0] + f._v[1] * cvec[1] + f._v[2] * cvec[2]))) < theta + f._rad);
+    bctx.beginPath(); vis.forEach(f => bpath(f)); bctx.fillStyle = C.land; bctx.fill();
+    if (hitFeat){ bctx.beginPath(); bpath(hitFeat); bctx.fillStyle = C.hit; bctx.fill(); }
+    bctx.beginPath(); vis.forEach(f => bpath(f)); bctx.strokeStyle = 'rgba(10,18,27,.85)'; bctx.lineWidth = .6; bctx.stroke();
+  } else {
+    bctx.beginPath(); countriesLo.forEach(f => bpath(f)); bctx.fillStyle = C.land; bctx.fill();
+    if (hitFeat){ bctx.beginPath(); bpath(hitFeat); bctx.fillStyle = C.hit; bctx.fill(); }
+    bctx.beginPath(); bpath(borderLo); bctx.strokeStyle = C.border; bctx.lineWidth = .7; bctx.stroke();
+  }
+  bctx.beginPath(); bpath({ type: 'Sphere' }); bctx.strokeStyle = 'rgba(116,211,255,.4)'; bctx.lineWidth = 1.2; bctx.stroke();
+}
+function draw(){
+  const useHi = !interacting && V.k >= HI_K;
+  projection.scale(R0 * V.k).translate([V.cx, V.cy]).rotate(V.rot).precision(useHi ? 0.5 : 2);
+  cvec = toVec(centre());
+  const key = [V.rot[0].toFixed(3), V.rot[1].toFixed(3), V.k.toFixed(3), V.cx.toFixed(1), V.cy.toFixed(1), useHi ? 1 : 0, hitFeat ? hitFeat.id : '', W, H, DPR].join('|');
+  if (key !== baseKey){ drawBase(useHi); baseKey = key; }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  ctx.drawImage(base, 0, 0);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.lineJoin = 'round';
 
   const dr = 5.5 + Math.min(2.5, Math.log2(V.k) * .7);
   ctx.fillStyle = 'rgba(255,178,36,.92)'; ctx.strokeStyle = '#07111a'; ctx.lineWidth = 1.2;
@@ -642,6 +672,7 @@ function layout(){
   const r = stage.getBoundingClientRect();
   W = r.width; H = r.height; DPR = Math.min(window.devicePixelRatio || 1, 1.5);
   cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  base.width = cv.width; base.height = cv.height; baseKey = '';
   R0 = Math.max(80, Math.min(W, H * .94) / 2 - 14);
   homeCy = H / 2 + Math.min(28, H * .04);
   if (V.k === 1 || !V.cx){ V.cx = W / 2; V.cy = homeCy; }
