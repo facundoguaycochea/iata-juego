@@ -213,7 +213,7 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
       <ol class="howto">
         <li><b>01</b><span>5 aeropuertos por partida. Cada partida sale distinta: los códigos aparecen siempre al azar.</span></li>
         <li><b>02</b><span>Marcá un punto en el mapa (podés hacer zoom y moverlo) y confirmá.</span></li>
-        <li><b>03</b><span>Hasta 100 puntos por vuelo: a menos de 25 km es perfecto, y el puntaje baja con la distancia.</span></li>
+        <li><b>03</b><span>Hasta 100 puntos por vuelo. Si acertás 3 de 5 (a menos de 500 km) pasás al siguiente nivel; si no, se termina.</span></li>
       </ol>
     </div>
   </div>
@@ -485,13 +485,17 @@ function buildRounds(){
   const rand = Math.random;
   let pool = AIRPORTS.filter(a => prefs.region === 'all' || a.region === prefs.region);
   const tiers = { easy:[1], mix:[1,2,3], hard:[2,3] }[prefs.diff];
-  let f = pool.filter(a => tiers.includes(a.tier));
-  if (f.length < ROUNDS) f = pool;
-  return pickFrom(f, ROUNDS, rand);
+  let f = pool.filter(a => tiers.includes(a.tier) && !S.used.has(a.code));
+  if (f.length < ROUNDS) f = pool.filter(a => !S.used.has(a.code));
+  if (f.length < ROUNDS){ S.used.clear(); f = pool; }
+  const out = pickFrom(f, ROUNDS, rand);
+  out.forEach(a => S.used.add(a.code));
+  return out;
 }
 
 /* ---------- state ---------- */
-const S = { mode:'daily', clue:'code', rounds:[], i:0, results:[], phase:'menu', guess:null, date:null };
+const HIT_KM = 500, NEED = 3;
+const S = { mode:'practice', clue:'code', rounds:[], i:0, results:[], phase:'menu', guess:null, date:null, level:1, cum:0, used:new Set() };
 
 /* ---------- map ---------- */
 const stage = $('#stage');
@@ -643,13 +647,13 @@ function renderHud(){
     else if (i === S.i && S.phase !== 'menu') el.className = 'cur';
     box.appendChild(el);
   }
-  $('#total').textContent = S.results.reduce((s, r) => s + r.pts, 0);
+  $('#total').textContent = S.cum + S.results.reduce((s, r) => s + r.pts, 0);
 }
 
 function renderBoard(){
   const a = S.rounds[S.i];
   $('#board').hidden = false;
-  $('#boardLeft').textContent = `Vuelo ${S.i + 1}/${ROUNDS}`;
+  $('#boardLeft').textContent = `Nivel ${S.level} · Vuelo ${S.i + 1}/${ROUNDS}`;
   $('#boardRight').textContent = S.clue === 'code' ? 'Código IATA' : 'Aeropuerto';
   renderFlaps(S.clue === 'code' ? a.code : a.name, S.clue !== 'code');
   const sub = $('#boardSub');
@@ -685,11 +689,19 @@ function renderDock(){
 /* ---------- flow ---------- */
 function startGame(){
   S.mode = 'practice'; S.clue = prefs.clue; S.date = todayKey();
+  S.level = 1; S.cum = 0; S.used.clear();
   S.rounds = buildRounds(); S.i = 0; S.results = []; S.guess = null;
   $('#menu').hidden = true; $('#summary').hidden = true;
   startRound();
 }
+function nextLevel(){
+  S.cum += S.results.reduce((s, r) => s + r.pts, 0);
+  S.level++;
+  S.rounds = buildRounds(); S.i = 0; S.results = []; S.guess = null;
+  startRound();
+}
 function startRound(){
+  $('#summary').hidden = true;
   S.phase = 'guess'; S.guess = null; lines = []; pins = [];
   landSel.classed('hit', false);
   drawLines(); drawPins();
@@ -722,7 +734,7 @@ function shareText(){
   const d = S.date.split('-').reverse().join('/');
   const head = 'IATA Juego';
   const clue = S.clue === 'code' ? 'código IATA' : 'nombre';
-  return `${head} ✈ ${clue}\n${total}/500 · ${rank(total)}\n` +
+  return `${head} ✈ ${clue}\nNivel ${S.level} · ${S.cum + total} pts · ${S.results.filter(r => r.km <= HIT_KM).length}/5 aciertos\n` +
     S.results.map(r => `${emoji(r.pts)} ${r.code} ${String(r.pts).padStart(3, ' ')}`).join('\n');
 }
 
@@ -732,6 +744,7 @@ function showSummary(){
   $('#menu').hidden = true; $('#board').hidden = true; $('#dock').hidden = true;
   const byCode = Object.fromEntries(AIRPORTS.map(a => [a.code, a]));
   const total = S.results.reduce((s, r) => s + r.pts, 0);
+  const hits = S.results.filter(r => r.km <= HIT_KM).length, passed = hits >= NEED;
   lines = S.results.map(r => ({ a: r.guess, b: [byCode[r.code].lon, byCode[r.code].lat], color: tone(r.pts) }));
   pins = S.results.flatMap(r => [{ ll: r.guess, kind: 'guess' }, { ll: [byCode[r.code].lon, byCode[r.code].lat], kind: 'real', label: r.code, color: tone(r.pts) }]);
   landSel.classed('hit', false);
@@ -740,21 +753,24 @@ function showSummary(){
   const d = new Date(S.date + 'T12:00:00');
   const dateLabel = d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
   $('#summaryCard').innerHTML = `
-    <div class="eyebrow">Partida al azar · ${S.clue === 'code' ? 'Código IATA' : 'Nombre'}</div>
-    <div class="total"><b>${total}</b><span>/ 500</span></div>
-    <p class="rank" style="color:${tone(total / 5)}">${rank(total)}</p>
+    <div class="eyebrow">Nivel ${S.level} · ${S.clue === 'code' ? 'Código IATA' : 'Nombre'}</div>
+    <div class="total"><b>${hits}</b><span>/ 5 aciertos</span></div>
+    <p class="rank" style="color:${passed ? 'var(--good)' : 'var(--bad)'}">${passed ? 'Nivel ' + S.level + ' superado' : 'Fin del juego'}</p>
+    <p class="next" style="margin:-8px 0 14px">Acierto = a menos de ${HIT_KM} km. Necesitás ${NEED} de 5 para seguir. Puntos: ${S.cum + total}</p>
     <div class="rows">${S.results.map(r => { const a = byCode[r.code]; return `
       <div class="row"><i style="background:${tone(r.pts)}"></i><span class="c">${a.code}</span>
         <span class="n">${esc(a.city)}<small>${esc(a.name)}</small></span>
         <span class="d">${fmt(r.km)} km</span><span class="p" style="color:${tone(r.pts)}">${r.pts}</span></div>`; }).join('')}
     </div>
     <div class="actions">
-      <button class="cta" id="shareBtn">Copiar resultado</button>
-      <button class="ghost" id="againBtn">Otra partida</button>
+      ${passed ? '<button class="cta" id="nextLvlBtn">Seguir al nivel ' + (S.level + 1) + '</button>' : ''}
+      <button class="${passed ? 'ghost' : 'cta'}" id="shareBtn">Copiar resultado</button>
+      <button class="ghost" id="againBtn">${passed ? 'Empezar de nuevo' : 'Jugar otra vez'}</button>
       <button class="ghost" id="toMenuBtn">Menú</button>
     </div>
     <textarea id="copyArea" readonly hidden></textarea>`;
   $('#summary').hidden = false;
+  if (passed) $('#nextLvlBtn').onclick = nextLevel;
   $('#shareBtn').onclick = share;
   $('#againBtn').onclick = startGame;
   $('#toMenuBtn').onclick = openMenu;
