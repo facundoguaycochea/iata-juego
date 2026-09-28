@@ -482,7 +482,7 @@ function pickFrom(pool, n, rand, used = new Set()){
   return out;
 }
 function buildRounds(){
-$1
+  const rand = Math.random;
   let pool = AIRPORTS.filter(a => prefs.region === 'all' || a.region === prefs.region);
   const tiers = { easy:[1], mix:[1,2,3], hard:[2,3] }[prefs.diff];
   let f = pool.filter(a => tiers.includes(a.tier));
