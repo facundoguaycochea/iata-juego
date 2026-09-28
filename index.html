@@ -634,13 +634,19 @@ AIRPORTS.forEach(a => { a.v = toVec([a.lon, a.lat]); });
 let cvec = toVec(centre());
 const facingV = v => v[0] * cvec[0] + v[1] * cvec[1] + v[2] * cvec[2] > 0.02;
 const facing = ll => { cvec = toVec(centre()); return facingV(toVec(ll)); };
-let interacting = false, idleT = 0, hoverA = null;
+let interacting = false, idleT = 0, hoverA = null, dotRegion = 'all';
+const inRegion = a => dotRegion === 'all' || a.region === dotRegion;
+const REGION_VIEW = { A: [-70, 0], E: [15, 50], M: [35, 10], P: [105, 0] };
+function focusRegion(){
+  const c = REGION_VIEW[dotRegion];
+  animateTo({ rot: c ? [-c[0], -c[1]] : [...V.rot], k: c ? 1.3 : 1, cx: W / 2, cy: homeCy }, 900);
+}
 function touch(){ interacting = true; clearTimeout(idleT); idleT = setTimeout(() => { interacting = false; render(); }, 180); }
 function nearestAirport(x, y, r){
   cvec = toVec(centre());
   let best = null, bd = r;
   for (const a of AIRPORTS){
-    if (!facingV(a.v)) continue;
+    if (!inRegion(a) || !facingV(a.v)) continue;
     const p = projection([a.lon, a.lat]), d = Math.hypot(p[0] - x, p[1] - y);
     if (d <= bd){ bd = d; best = a; }
   }
@@ -762,7 +768,7 @@ function draw(){
   const dr = 5.5 + Math.min(2.5, Math.log2(V.k) * .7);
   ctx.fillStyle = 'rgba(255,178,36,.92)'; ctx.strokeStyle = '#07111a'; ctx.lineWidth = 1.2;
   for (const a of AIRPORTS){
-    if (!facingV(a.v) || a === hoverA) continue;
+    if (!inRegion(a) || !facingV(a.v) || a === hoverA) continue;
     const p = projection([a.lon, a.lat]); ctx.beginPath(); ctx.arc(p[0], p[1], dr, 0, 7); ctx.fill(); ctx.stroke();
   }
   if (hoverA && facingV(hoverA.v)){
@@ -845,7 +851,10 @@ function focusOn(coords, maxK = 12){
   const k = theta >= 1.2 ? 1 : Math.max(1, Math.min(maxK, half / (R0 * Math.sin(theta))));
   animateTo({ rot: [-c[0], -c[1]], k, cx: aw / 2, cy: sa.top + ah / 2 });
 }
-function resetView(){ animateTo({ rot: [...V.rot], k: 1, cx: W / 2, cy: homeCy }, 600); }
+function resetView(){
+  const c = REGION_VIEW[dotRegion];
+  animateTo({ rot: c ? [-c[0], -c[1]] : [...V.rot], k: 1, cx: W / 2, cy: homeCy }, 600);
+}
 
 /* input: drag to spin, wheel / pinch to zoom, tap to place */
 const ptrs = new Map(); let tap = null, pinch = 0;
@@ -1019,7 +1028,7 @@ function requestOptions(){
   const a = S.rounds[S.i];
   const far = (b, c) => distKm(b, c) > 600;
   let decoys = [];
-  const pools = [AIRPORTS.filter(b => b.region === a.region), AIRPORTS];
+  const pools = [AIRPORTS.filter(b => b.region === a.region), AIRPORTS.filter(inRegion)];
   for (const pool of pools){
     const cand = pool.filter(b => b.code !== a.code && far(a, b)).sort(() => Math.random() - .5);
     for (const b of cand){ if (decoys.length < 2 && decoys.every(c => far(c, b))) decoys.push(b); }
@@ -1353,6 +1362,7 @@ function updateRankNote(){
   else { el.textContent = 'Con una región elegida no se guarda en el ranking.'; el.style.color = 'var(--muted)'; }
 }
 function syncMenu(){
+  dotRegion = prefs.region; render();
   updateRankNote();
   document.querySelectorAll('.seg').forEach(seg => {
     const key = seg.dataset.key;
@@ -1362,6 +1372,7 @@ function syncMenu(){
 document.querySelectorAll('.seg').forEach(seg => seg.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   prefs[seg.dataset.key] = b.dataset.v; savePrefs(); rdView = null; syncMenu();
+  if (seg.dataset.key === 'region') focusRegion();
 }));
 function openMenu(){
   S.phase = 'menu'; stopTimer(); resetView(); startPlanes(); titleFlap.set('IATAJUEGO');
