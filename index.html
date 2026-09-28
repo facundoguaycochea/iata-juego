@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>html,body{margin:0;padding:0}[hidden]{display:none!important}</style>
-<title>IATA Juego</title>
+<title>IATAJUEGO</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
@@ -96,6 +96,36 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
   100%{transform:translate(calc(100vw + 260px),0) scale(.72) scaleX(-1)}
 }
 @media (prefers-reduced-motion:reduce){.sky{display:none}}
+#menu{backdrop-filter:none;background:rgba(6,11,17,.42)}
+.hero{justify-content:center;margin-bottom:14px}
+.rankdock{position:absolute;right:16px;bottom:16px;width:262px;z-index:7;background:rgba(15,26,38,.94);border:1px solid var(--line);border-radius:14px;padding:12px 12px 8px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+.rd-head{display:flex;flex-direction:column;gap:2px}
+.rd-head b{font-size:18px;font-weight:700;letter-spacing:.02em}
+.rankdock .rank-list{margin:8px 0 0}
+.rankdock .rank-list li{grid-template-columns:24px 1fr auto auto;gap:8px;padding:3px 2px}
+.rankdock .rank-list .nm{font-size:15px;font-weight:600}
+.rankdock .rank-list .sc{font-size:16px}
+.rankdock .rank-list li.empty{padding:10px 0;font-size:14px}
+@media (max-width:1099px){.rankdock{display:none!important}}
+@media (min-width:1100px){#rankBtn{display:none}}
+.sf-board{display:inline-flex;flex-direction:column;padding:14px 16px;border-radius:16px;max-width:100%;background:linear-gradient(145deg,#0c0c0c 0%,#080808 50%,#0a0a0a 100%);border:1px solid rgba(255,255,255,.06);box-shadow:0 20px 60px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.03),inset 0 1px 0 rgba(255,255,255,.04)}
+.sf-row{display:flex;align-items:center;gap:6px}
+.sf-strip{width:6px;align-self:stretch;border-radius:2px;flex-shrink:0;background:linear-gradient(180deg,#ffb224 0%,#ffb22499 40%,#ffb22466 60%,#ffb22499 100%);box-shadow:0 0 8px #ffb22444,inset 0 1px 2px rgba(255,255,255,.2)}
+.sf-cells{display:flex;gap:3px}
+.sf-cell{position:relative;width:38px;height:54px;font:700 24px "SF Mono","Fira Code","IBM Plex Mono","Courier New",monospace;perspective:400px;user-select:none}
+.sf-cell.sm{width:26px;height:38px;font-size:16px}
+.sf-half{position:absolute;left:0;right:0;height:50%;overflow:hidden}
+.sf-top{top:0;border-radius:3px 3px 0 0;background:linear-gradient(180deg,#1e1e1e 0%,#181818 100%)}
+.sf-bot{bottom:0;border-radius:0 0 3px 3px;background:linear-gradient(180deg,#151515 0%,#111 100%)}
+.sf-half span{position:absolute;left:50%;line-height:1;white-space:pre}
+.sf-top span{bottom:0;transform:translate(-50%,48%);color:#e8e6e3;text-shadow:0 1px 1px rgba(0,0,0,.6)}
+.sf-bot span{top:0;transform:translate(-50%,-48%);color:#d4d2cf;text-shadow:0 -1px 1px rgba(0,0,0,.6)}
+.sf-flip-top{z-index:10;transform-origin:bottom center;background:linear-gradient(180deg,#222 0%,#1a1a1a 100%)}
+.sf-flip-bot{z-index:10;transform-origin:top center;background:linear-gradient(180deg,#181818 0%,#111 100%)}
+.sf-div{position:absolute;left:0;right:0;top:50%;height:2px;transform:translateY(-50%);z-index:20;pointer-events:none;background:linear-gradient(90deg,rgba(0,0,0,.9) 0%,rgba(0,0,0,.7) 50%,rgba(0,0,0,.9) 100%);box-shadow:0 1px 0 rgba(255,255,255,.04)}
+.sf-shade{position:absolute;inset:0;border-radius:3px;z-index:20;pointer-events:none;box-shadow:inset 0 1px 2px rgba(0,0,0,.5),inset 0 -1px 2px rgba(0,0,0,.3)}
+@keyframes sfTopDown{from{transform:rotateX(0)}to{transform:rotateX(-90deg)}}
+@keyframes sfBotUp{from{transform:rotateX(90deg)}to{transform:rotateX(0)}}
 .opt{cursor:pointer}
 .opt text{font-size:14px;font-weight:700;pointer-events:none}
 
@@ -204,7 +234,7 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
 <header class="bar">
   <div class="brand">
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg>
-    <span>IATA <em>Juego</em></span>
+    <span>IATA<em>JUEGO</em></span>
   </div>
   <div class="rounds" id="rounds" aria-label="Progreso"></div>
   <div class="score"><span>PUNTOS</span><b id="total">0</b></div>
@@ -231,13 +261,9 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
   <div class="dock" id="dock" hidden></div>
 
   <div class="overlay" id="menu">
-    <div class="sky" aria-hidden="true">
-      <div class="flyby f1"><div class="trail"></div><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg></div>
-      <div class="flyby f2"><div class="trail"></div><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg></div>
-    </div>
     <div class="card">
       <div class="hero">
-        <h1>IATA <em>Juego</em></h1>
+        <div id="titleFlap" role="img" aria-label="IATAJUEGO"></div>
       </div>
       <p class="tag">Te damos un aeropuerto. Tocá el mapa donde creés que queda. Cuanto más cerca, más puntos.</p>
 
@@ -278,6 +304,11 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
       </ol>
     </div>
   </div>
+
+  <aside class="rankdock" id="rankDock" hidden>
+    <div class="rd-head"><span class="eyebrow">Ranking mundial · top 15</span><b id="rdBoard"></b></div>
+    <ol class="rank-list" id="rdList"><li class="empty">Cargando…</li></ol>
+  </aside>
 
   <div class="overlay" id="rankOv" hidden>
     <div class="card">
@@ -612,6 +643,61 @@ function nearestAirport(x, y, r){
 
 let queued = false;
 function render(){ if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; draw(); }); }
+/* planes that circle the globe on random great circles (start screen) */
+const PLANE = new Path2D('M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z');
+const planes = [];
+const unit = v => { const n = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / n, v[1] / n, v[2] / n]; };
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+function rotAbout(v, k, ang){
+  const c = Math.cos(ang), sn = Math.sin(ang), d = k[0] * v[0] + k[1] * v[1] + k[2] * v[2], cr = cross(k, v);
+  return [0, 1, 2].map(i => v[i] * c + cr[i] * sn + k[i] * d * (1 - c));
+}
+const toLL = v => [Math.atan2(v[1], v[0]) * 180 / Math.PI, Math.asin(Math.max(-1, Math.min(1, v[2]))) * 180 / Math.PI];
+function spawnPlane(){
+  const k = unit([Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1]);
+  const p = unit(cross(k, unit([Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1])));
+  return { k, p, w: (0.09 + Math.random() * 0.1) * (Math.random() < .5 ? -1 : 1), trail: [p] };
+}
+for (let i = 0; i < 4; i++) planes.push(spawnPlane());
+function movePlanes(dt){
+  for (const pl of planes){
+    pl.p = rotAbout(pl.p, pl.k, pl.w * dt);
+    const last = pl.trail[pl.trail.length - 1];
+    if (last[0] * pl.p[0] + last[1] * pl.p[1] + last[2] * pl.p[2] < Math.cos(0.035)){ pl.trail.push(pl.p); if (pl.trail.length > 26) pl.trail.shift(); }
+  }
+}
+function drawPlanes(){
+  ctx.lineCap = 'round';
+  for (const pl of planes){
+    const front = v => v[0] * cvec[0] + v[1] * cvec[1] + v[2] * cvec[2];
+    const pts = [...pl.trail, pl.p];
+    for (let i = 1; i < pts.length; i++){
+      const f = Math.min(front(pts[i - 1]), front(pts[i])); if (f <= 0.02) continue;
+      const a = projection(toLL(pts[i - 1])), b = projection(toLL(pts[i]));
+      ctx.strokeStyle = 'rgba(255,178,36,' + (0.55 * i / pts.length * Math.min(1, f / .2)).toFixed(3) + ')';
+      ctx.lineWidth = 2.5 * i / pts.length + .5;
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    }
+    const d = front(pl.p); if (d <= 0.02) continue;
+    const a = projection(toLL(pl.p)), b = projection(toLL(rotAbout(pl.p, pl.k, .02 * Math.sign(pl.w))));
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, d / .2);
+    ctx.translate(a[0], a[1]); ctx.rotate(Math.atan2(b[1] - a[1], b[0] - a[0]) + Math.PI / 2);
+    ctx.scale(1.25, 1.25); ctx.translate(-12, -12);
+    ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 3;
+    ctx.fillStyle = '#ffb224'; ctx.fill(PLANE);
+    ctx.restore();
+  }
+}
+let planeRAF = 0, planeT = 0;
+function planesTick(now){
+  if (S.phase !== 'menu'){ planeRAF = 0; return; }
+  movePlanes(Math.min(.05, (now - planeT) / 1000)); planeT = now;
+  draw();
+  planeRAF = requestAnimationFrame(planesTick);
+}
+function startPlanes(){ if (REDUCE || planeRAF) return; planeT = performance.now(); planeRAF = requestAnimationFrame(planesTick); }
+
 /* the globe itself is drawn into an off-screen canvas and only redrawn when the view moves */
 const base = document.createElement('canvas'), bctx = base.getContext('2d');
 const bpath = d3.geoPath(projection, bctx);
@@ -697,6 +783,7 @@ function draw(){
       }
     }
   }
+  if (S.phase === 'menu') drawPlanes();
 }
 
 function layout(){
@@ -907,7 +994,7 @@ function startGame(){
   }
   S.nick = nick; store.set('iata:nick', nick);
   S.rankRes = null;
-  S.mode = 'practice'; S.clue = prefs.clue; S.date = todayKey();
+  S.mode = 'practice'; setTimeout(refreshRankDock, 0); S.clue = prefs.clue; S.date = todayKey();
   S.level = 1; S.cum = 0; S.used.clear(); S.hintsLeft = 2;
   S.diff = prefs.diff; S.ranked = prefs.region === 'all'; S.finished = false;
   S.rounds = buildRounds(); S.i = 0; S.results = []; S.guess = null;
@@ -975,6 +1062,77 @@ function confetti(){
   };
   cfRun = requestAnimationFrame(step);
 }
+
+/* ---------- split-flap display (port of split-flap-display.tsx) ---------- */
+const SF_CHARS = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789$.,!?:;+-=%&#@';
+function makeSplitFlap(box, opts){
+  const o = Object.assign({ stagger: 70, flipSpeed: 45 }, opts);
+  let cells = [];
+  function build(n){
+    box.innerHTML = ''; cells = [];
+    box.classList.add('sf-board');
+    const row = document.createElement('div'); row.className = 'sf-row';
+    const strip = () => { const d = document.createElement('div'); d.className = 'sf-strip'; return d; };
+    const wrap = document.createElement('div'); wrap.className = 'sf-cells';
+    for (let i = 0; i < n; i++){
+      const c = document.createElement('div'); c.className = 'sf-cell' + (innerWidth < 520 ? ' sm' : '');
+      c.innerHTML = '<div class="sf-half sf-top"><span> </span></div><div class="sf-half sf-bot"><span> </span></div><div class="sf-div"></div><div class="sf-shade"></div>';
+      wrap.appendChild(c);
+      cells.push({ node: c, top: c.children[0], bot: c.children[1], disp: ' ', t: 0, iv: 0 });
+    }
+    row.append(strip(), wrap, strip()); box.appendChild(row);
+  }
+  const paint = (c, ch) => { c.top.firstChild.textContent = ch; c.bot.firstChild.textContent = ch; };
+  function flip(c, prev, next){
+    paint(c, next);
+    const fs = o.flipSpeed;
+    const t = document.createElement('div'); t.className = 'sf-half sf-top sf-flip-top';
+    t.innerHTML = '<span></span>'; t.firstChild.textContent = prev;
+    t.style.animation = 'sfTopDown ' + fs * .4 + 'ms ease-in forwards'; c.node.appendChild(t);
+    setTimeout(() => {
+      t.remove();
+      const b = document.createElement('div'); b.className = 'sf-half sf-bot sf-flip-bot';
+      b.innerHTML = '<span></span>'; b.firstChild.textContent = next;
+      b.style.animation = 'sfBotUp ' + fs * .4 + 'ms ease-out forwards'; c.node.appendChild(b);
+      setTimeout(() => b.remove(), fs * .45);
+    }, fs * .4);
+  }
+  return {
+    set(text){
+      text = text.toUpperCase();
+      if (cells.length !== text.length) build(text.length);
+      cells.forEach((c, i) => {
+        clearTimeout(c.t); clearInterval(c.iv);
+        const target = text[i];
+        if (REDUCE){ c.disp = target; paint(c, target); return; }
+        c.disp = ' '; paint(c, ' ');
+        if (target === ' ') return;
+        c.t = setTimeout(() => {
+          c.iv = setInterval(() => {
+            const prev = c.disp, next = SF_CHARS[(SF_CHARS.indexOf(prev) + 1) % SF_CHARS.length];
+            c.disp = next; flip(c, prev, next);
+            if (next === target) clearInterval(c.iv);
+          }, o.flipSpeed);
+        }, i * o.stagger);
+      });
+    }
+  };
+}
+const titleFlap = makeSplitFlap($('#titleFlap'));
+
+/* ---------- always-visible ranking (bottom right) ---------- */
+async function refreshRankDock(){
+  const dock = $('#rankDock'), inMenu = S.phase === 'menu';
+  const show = innerWidth >= 1100 && S.phase !== 'done' && (inMenu || innerWidth >= 1300);
+  dock.hidden = !show; if (!show) return;
+  const clue = inMenu ? prefs.clue : S.clue, diff = inMenu ? prefs.diff : S.diff, key = boardKey(clue, diff);
+  $('#rdBoard').textContent = CLUE_LABEL[clue] + ' · ' + DIFF_LABEL[diff];
+  const list = await rankStore.load(key);
+  const now = S.phase === 'menu' ? boardKey(prefs.clue, prefs.diff) : boardKey(S.clue, S.diff);
+  if (key === now) $('#rdList').innerHTML = rankHtml(list, S.rankRes && S.rankRes.entry && S.rankRes.entry.id);
+}
+setInterval(refreshRankDock, 20000);
+addEventListener('resize', () => refreshRankDock());
 
 /* ---------- timer ---------- */
 const TIME_LIMIT = 12;   // seconds per airport
@@ -1085,12 +1243,12 @@ function shareText(){
   const total = S.results.reduce((s, r) => s + r.pts, 0);
   const run = S.finished ? S.cum : S.cum + total;
   const clue = S.clue === 'code' ? 'código IATA' : 'nombre';
-  return `IATA Juego ✈ ${clue} · ${DIFF_LABEL[S.diff]}\nNivel ${S.level} · ${run} pts · ${S.results.filter(isHit).length}/5 aciertos\n` +
+  return `IATAJUEGO ✈ ${clue} · ${DIFF_LABEL[S.diff]}\nNivel ${S.level} · ${run} pts · ${S.results.filter(isHit).length}/5 aciertos\n` +
     S.results.map(r => `${emoji(r.pts)} ${r.code} ${String(r.pts).padStart(3, ' ')}`).join('\n');
 }
 
 function showSummary(){
-  S.phase = 'done'; stopTimer();
+  S.phase = 'done'; stopTimer(); refreshRankDock();
   $('#menu').hidden = true; $('#board').hidden = true; $('#dock').hidden = true;
   const byCode = Object.fromEntries(AIRPORTS.map(a => [a.code, a]));
   const total = S.results.reduce((s, r) => s + r.pts, 0);
@@ -1172,6 +1330,7 @@ function toast(msg){
 /* ---------- menu ---------- */
 function savePrefs(){ store.set('iata:prefs', prefs); }
 function updateRankNote(){
+  if (typeof refreshRankDock === 'function') refreshRankDock();
   const el = $('#rankMenuNote'); if (!el) return;
   if (prefs.region === 'all'){ el.textContent = 'Esta partida entra al ranking: ' + CLUE_LABEL[prefs.clue] + ' · ' + DIFF_LABEL[prefs.diff]; el.style.color = 'var(--good)'; }
   else { el.textContent = 'Con una región elegida no se guarda en el ranking.'; el.style.color = 'var(--muted)'; }
@@ -1188,10 +1347,10 @@ document.querySelectorAll('.seg').forEach(seg => seg.addEventListener('click', e
   prefs[seg.dataset.key] = b.dataset.v; savePrefs(); syncMenu();
 }));
 function openMenu(){
-  S.phase = 'menu'; stopTimer();
+  S.phase = 'menu'; stopTimer(); resetView(); startPlanes(); titleFlap.set('IATAJUEGO');
   $('#summary').hidden = true; $('#board').hidden = true; $('#dock').hidden = true;
   $('#menu').hidden = false;
-  syncMenu();
+  syncMenu(); refreshRankDock();
 }
 $('#startBtn').onclick = startGame;
 $('#menuBtn').onclick = openMenu;
@@ -1209,4 +1368,5 @@ layout();
 $('#nickIn').value = store.get('iata:nick') || '';
 $('#nickIn').addEventListener('input', () => $('#nickIn').classList.remove('bad'));
 syncMenu(); renderHud();
+titleFlap.set('IATAJUEGO'); startPlanes(); refreshRankDock();
 </script>
