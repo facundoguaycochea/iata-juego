@@ -39,7 +39,8 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
 
 /* ---------- stage & map ---------- */
 #stage{position:relative;overflow:hidden;min-height:0}
-#map{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair;background:var(--bg)}
+#map{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab;background:radial-gradient(ellipse at 50% 40%,#0e1c2c 0,var(--bg) 70%)}
+#map:active{cursor:grabbing}
 .sphere{fill:var(--ocean)}
 .grat{fill:none;stroke:var(--grat);stroke-width:.6;vector-effect:non-scaling-stroke}
 .land path{fill:var(--land);transition:fill .4s}
@@ -164,7 +165,7 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
 </header>
 
 <main id="stage">
-  <svg id="map" role="img" aria-label="Mapa del mundo. Tocá para marcar tu respuesta."></svg>
+  <canvas id="map" role="img" aria-label="Globo terráqueo. Arrastrá para girarlo, tocá para marcar tu respuesta."></canvas>
 
   <div class="board" id="board" hidden>
     <div class="board-top"><span id="boardLeft">Vuelo 1/5</span><b id="boardRight">Destino</b></div>
@@ -215,7 +216,7 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
 
       <ol class="howto">
         <li><b>01</b><span>5 aeropuertos por partida. Cada partida sale distinta: los códigos aparecen siempre al azar.</span></li>
-        <li><b>02</b><span>Marcá un punto en el mapa (podés hacer zoom y moverlo) y confirmá. Los puntos amarillos son los aeropuertos del juego. Si dudás, pedí 3 opciones: se marcan A, B y C en el mapa, pero ese vuelo vale la mitad de puntos.</span></li>
+        <li><b>02</b><span>Marcá un punto en el mapa (podés hacer zoom y moverlo) y confirmá. Los puntos amarillos son los aeropuertos del juego. Arrastrá el globo para girarlo. Si dudás, pedí 3 opciones (máximo 2 por nivel): se marcan A, B y C en el globo, pero ese vuelo vale la mitad de puntos.</span></li>
         <li><b>03</b><span>Hasta 100 puntos por vuelo. Si acertás 3 de 5 (a menos de 500 km) pasás al siguiente nivel; si no, se termina.</span></li>
       </ol>
     </div>
@@ -498,85 +499,107 @@ function buildRounds(){
 
 /* ---------- state ---------- */
 const HIT_KM = 500, NEED = 3;
-const S = { mode:'practice', clue:'code', rounds:[], i:0, results:[], phase:'menu', guess:null, date:null, level:1, cum:0, used:new Set(), hint:null };
+const S = { mode:'practice', clue:'code', rounds:[], i:0, results:[], phase:'menu', guess:null, date:null, level:1, cum:0, used:new Set(), hint:null, hintsLeft:2 };
 
-/* ---------- map ---------- */
+/* ---------- map (globe) ---------- */
 const stage = $('#stage');
-const svg = d3.select('#map');
-const gRoot = svg.append('g');
-const sphereEl = gRoot.append('path').attr('class', 'sphere');
-const gratEl = gRoot.append('path').attr('class', 'grat');
+const cv = $('#map'), ctx = cv.getContext('2d');
 const countries = topojson.feature(WORLD, WORLD.objects.countries).features;
 const borderMesh = topojson.mesh(WORLD, WORLD.objects.countries, (a, b) => a !== b);
-const landSel = gRoot.append('g').attr('class', 'land').selectAll('path').data(countries).join('path');
-const bordersEl = gRoot.append('path').attr('class', 'borders');
-const gLines = gRoot.append('g').attr('class', 'lines');
-const gDots = svg.append('g').attr('class', 'dots');
-const gPins = svg.append('g').attr('class', 'pins');
 const graticule = d3.geoGraticule10();
-const projection = d3.geoNaturalEarth1();
-let geoPath = d3.geoPath(projection);
-let T = d3.zoomIdentity, W = 0, H = 0;
+const projection = d3.geoOrthographic().clipAngle(90).precision(0.5);
+const path = d3.geoPath(projection, ctx);
+const rootCss = getComputedStyle(document.documentElement);
+const cssv = n => rootCss.getPropertyValue(n).trim();
+const C = { ocean: cssv('--ocean'), ocean2: '#173250', land: cssv('--land'), grat: cssv('--grat'), border: cssv('--border'), amber: cssv('--amber'), hit: '#5a4515' };
+const col = c => { const m = /^var\((--[\w-]+)\)$/.exec(c || ''); return m ? cssv(m[1]) : c; };
+const V = { rot: [20, -20], k: 1, cx: 0, cy: 0 };   // rot = projection.rotate([lambda, phi]); the view centre is [-lambda, -phi]
+let W = 0, H = 0, DPR = 1, R0 = 200, homeCy = 0, hitFeat = null;
+let lines = [];   // {a:[lon,lat], b:[lon,lat], color}
+let pins = [];    // {ll:[lon,lat], kind:'guess'|'real'|'opt', label, color, idx}
+const centre = () => [-V.rot[0], -V.rot[1]];
+const facing = ll => d3.geoDistance(centre(), ll) < Math.PI / 2 - 0.01;
 
-const zoom = d3.zoom().scaleExtent([1, 60]).on('zoom', e => {
-  T = e.transform;
-  gRoot.attr('transform', T);
-  drawDots(); drawPins();
-});
-svg.call(zoom).on('dblclick.zoom', null);
+let queued = false;
+function render(){ if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; draw(); }); }
+function draw(){
+  projection.scale(R0 * V.k).translate([V.cx, V.cy]).rotate(V.rot);
+  const r = R0 * V.k;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  ctx.lineJoin = 'round';
+  const glow = ctx.createRadialGradient(V.cx, V.cy, r * .97, V.cx, V.cy, r * 1.14);
+  glow.addColorStop(0, 'rgba(116,211,255,.30)'); glow.addColorStop(1, 'rgba(116,211,255,0)');
+  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(V.cx, V.cy, r * 1.14, 0, 7); ctx.fill();
+  const og = ctx.createRadialGradient(V.cx - r * .35, V.cy - r * .4, r * .05, V.cx, V.cy, r);
+  og.addColorStop(0, C.ocean2); og.addColorStop(1, C.ocean);
+  ctx.beginPath(); path({ type: 'Sphere' }); ctx.fillStyle = og; ctx.fill();
+  ctx.beginPath(); path(graticule); ctx.strokeStyle = C.grat; ctx.lineWidth = .6; ctx.stroke();
+  ctx.beginPath(); countries.forEach(f => path(f)); ctx.fillStyle = C.land; ctx.fill();
+  if (hitFeat){ ctx.beginPath(); path(hitFeat); ctx.fillStyle = C.hit; ctx.fill(); }
+  ctx.beginPath(); path(borderMesh); ctx.strokeStyle = C.border; ctx.lineWidth = .7; ctx.stroke();
+  ctx.beginPath(); path({ type: 'Sphere' }); ctx.strokeStyle = 'rgba(116,211,255,.4)'; ctx.lineWidth = 1.2; ctx.stroke();
+
+  ctx.fillStyle = 'rgba(255,178,36,.7)'; ctx.strokeStyle = '#07111a'; ctx.lineWidth = .8;
+  for (const a of AIRPORTS){
+    const ll = [a.lon, a.lat]; if (!facing(ll)) continue;
+    const p = projection(ll); ctx.beginPath(); ctx.arc(p[0], p[1], 3, 0, 7); ctx.fill(); ctx.stroke();
+  }
+  ctx.setLineDash([5, 5]); ctx.lineWidth = 2; ctx.lineCap = 'round';
+  for (const l of lines){ ctx.beginPath(); path({ type: 'LineString', coordinates: [l.a, l.b] }); ctx.strokeStyle = col(l.color); ctx.stroke(); }
+  ctx.setLineDash([]);
+  ctx.font = '600 12px "IBM Plex Mono", monospace'; ctx.textBaseline = 'middle';
+  for (const d of pins){
+    d._vis = facing(d.ll); if (!d._vis) continue;
+    const [x, y] = projection(d.ll); d._x = x; d._y = y;
+    if (d.kind === 'opt'){
+      const c = col(d.color) || C.amber;
+      ctx.beginPath(); ctx.arc(x, y, 17, 0, 7); ctx.fillStyle = 'rgba(7,12,18,.7)'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = c; ctx.stroke();
+      ctx.fillStyle = c; ctx.font = '700 15px "IBM Plex Mono", monospace'; ctx.textAlign = 'center'; ctx.fillText(d.label, x, y + 1);
+      ctx.font = '600 12px "IBM Plex Mono", monospace'; ctx.textAlign = 'left';
+    } else if (d.kind === 'guess'){
+      ctx.beginPath(); ctx.arc(x, y, 11, 0, 7); ctx.fillStyle = 'rgba(116,211,255,.2)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, 6, 0, 7); ctx.fillStyle = cssv('--cyan'); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#07111a'; ctx.stroke();
+    } else {
+      const c = col(d.color) || C.amber;
+      ctx.beginPath(); ctx.arc(x, y, 7, 0, 7); ctx.fillStyle = c; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#07111a'; ctx.stroke();
+      if (d.label){
+        const w = ctx.measureText(d.label).width + 10;
+        ctx.beginPath(); ctx.roundRect(x + 10, y - 10, w, 20, 4); ctx.fillStyle = '#070c12'; ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = c; ctx.stroke();
+        ctx.fillStyle = c; ctx.fillText(d.label, x + 15, y + 1);
+      }
+    }
+  }
+}
 
 function layout(){
   const r = stage.getBoundingClientRect();
-  W = r.width; H = r.height;
-  svg.attr('viewBox', `0 0 ${W} ${H}`);
-  projection.fitExtent([[12, 12], [W - 12, H - 12]], { type: 'Sphere' });
-  geoPath = d3.geoPath(projection);
-  sphereEl.attr('d', geoPath({ type: 'Sphere' }));
-  gratEl.attr('d', geoPath(graticule));
-  landSel.attr('d', geoPath);
-  bordersEl.attr('d', geoPath(borderMesh));
-  zoom.extent([[0, 0], [W, H]]).translateExtent([[0, 0], [W, H]]);
-  drawLines(); drawDots(); drawPins();
+  W = r.width; H = r.height; DPR = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  R0 = Math.max(80, Math.min(W, H * .94) / 2 - 14);
+  homeCy = H / 2 + Math.min(28, H * .04);
+  if (V.k === 1 || !V.cx){ V.cx = W / 2; V.cy = homeCy; }
+  render();
 }
 
-let lines = [];   // {a:[lon,lat], b:[lon,lat], color}
-let pins = [];    // {ll:[lon,lat], kind:'guess'|'real', label, color}
-function drawLines(){
-  gLines.selectAll('path').data(lines).join('path')
-    .attr('d', d => geoPath({ type: 'LineString', coordinates: [d.a, d.b] }))
-    .attr('stroke', d => d.color);
+let anim = 0;
+function animateTo(t, dur = 900){
+  cancelAnimationFrame(anim);
+  const from = { rot: [...V.rot], k: V.k, cx: V.cx, cy: V.cy };
+  const dl = ((t.rot[0] - from.rot[0] + 540) % 360) - 180;
+  const to = { rot: [from.rot[0] + dl, Math.max(-90, Math.min(90, t.rot[1]))], k: t.k, cx: t.cx, cy: t.cy };
+  if (REDUCE || !dur){ Object.assign(V, to); render(); return; }
+  const t0 = performance.now();
+  const step = now => {
+    const u = Math.min(1, (now - t0) / dur), e = d3.easeCubicInOut(u);
+    V.rot = [from.rot[0] + (to.rot[0] - from.rot[0]) * e, from.rot[1] + (to.rot[1] - from.rot[1]) * e];
+    V.k = from.k * Math.pow(to.k / from.k, e);
+    V.cx = from.cx + (to.cx - from.cx) * e; V.cy = from.cy + (to.cy - from.cy) * e;
+    draw();
+    if (u < 1) anim = requestAnimationFrame(step);
+  };
+  anim = requestAnimationFrame(step);
 }
-function drawDots(){
-  gDots.selectAll('circle').data(AIRPORTS, d => d.code).join('circle').attr('r', 3)
-    .attr('cx', d => T.applyX(projection([d.lon, d.lat])[0]))
-    .attr('cy', d => T.applyY(projection([d.lon, d.lat])[1]));
-}
-function drawPins(){
-  const sel = gPins.selectAll('g.pin').data(pins, (d, i) => `${i}-${d.kind}-${d.label || ''}-${d.color || ''}`).join(enter => {
-    const g = enter.append('g').attr('class', 'pin');
-    g.each(function(d){
-      const n = d3.select(this);
-      if (d.kind === 'opt'){
-        n.classed('opt', true).on('click', ev => { ev.stopPropagation(); pickOption(d.idx); });
-        n.append('circle').attr('r', 17).attr('fill', 'rgba(255,178,36,.14)').attr('stroke', d.color || 'var(--amber)').attr('stroke-width', 2);
-        n.append('text').attr('text-anchor', 'middle').attr('y', 5).attr('fill', d.color || 'var(--amber)').text(d.label);
-      } else if (d.kind === 'guess'){
-        n.append('circle').attr('r', 11).attr('fill', 'rgba(116,211,255,.18)');
-        n.append('circle').attr('r', 6).attr('fill', 'var(--cyan)').attr('stroke', '#07111a').attr('stroke-width', 2);
-      } else {
-        n.append('circle').attr('r', 7).attr('fill', d.color || 'var(--amber)').attr('stroke', '#07111a').attr('stroke-width', 2);
-        if (d.label){
-          const w = d.label.length * 7.4 + 10;
-          n.append('rect').attr('x', 10).attr('y', -10).attr('width', w).attr('height', 20).attr('rx', 4).attr('fill', '#070c12').attr('stroke', d.color || 'var(--amber)');
-          n.append('text').attr('x', 15).attr('y', 4).attr('fill', d.color || 'var(--amber)').text(d.label);
-        }
-      }
-    });
-    return g;
-  });
-  sel.attr('transform', d => { const p = T.apply(projection(d.ll)); return `translate(${p[0]},${p[1]})`; });
-}
-
 function safeArea(){
   const top = $('#board').hidden ? 0 : $('#board').getBoundingClientRect().bottom - stage.getBoundingClientRect().top;
   const dock = $('#dock');
@@ -586,36 +609,68 @@ function safeArea(){
   if (!$('#summary').hidden && innerWidth <= 640) return { top: 10, bottom: $('#summaryCard').getBoundingClientRect().height + 10, right: 0 };
   return { top: top + 10, bottom: bottom + 10, right };
 }
-function focusOn(coords, maxK = 7){
-  const xy = coords.map(c => projection(c));
-  let x0 = d3.min(xy, p => p[0]), x1 = d3.max(xy, p => p[0]);
-  let y0 = d3.min(xy, p => p[1]), y1 = d3.max(xy, p => p[1]);
-  const pad = 60, sa = safeArea();
-  const aw = W - sa.right - pad * 2, ah = H - sa.top - sa.bottom - pad * 2;
-  const dx = Math.max(x1 - x0, 1), dy = Math.max(y1 - y0, 1);
-  const k = Math.max(1, Math.min(maxK, aw / dx, ah / dy));
-  const cx = (W - sa.right) / 2, cy = sa.top + (H - sa.top - sa.bottom) / 2;
-  const t = d3.zoomIdentity.translate(cx - k * (x0 + x1) / 2, cy - k * (y0 + y1) / 2).scale(k);
-  svg.transition().duration(REDUCE ? 0 : 900).ease(d3.easeCubicInOut).call(zoom.transform, t);
+function focusOn(coords, maxK = 12){
+  const c = coords.length === 1 ? coords[0] : d3.geoCentroid({ type: 'MultiPoint', coordinates: coords });
+  const maxd = d3.max(coords, p => d3.geoDistance(c, p));
+  const sa = safeArea(), aw = W - sa.right, ah = H - sa.top - sa.bottom;
+  const half = Math.max(60, Math.min(aw, ah) / 2 - 50);
+  const theta = Math.max(maxd * 1.35, .02);
+  const k = theta >= 1.2 ? 1 : Math.max(1, Math.min(maxK, half / (R0 * Math.sin(theta))));
+  animateTo({ rot: [-c[0], -c[1]], k, cx: aw / 2, cy: sa.top + ah / 2 });
 }
-function resetView(){ svg.transition().duration(REDUCE ? 0 : 600).call(zoom.transform, d3.zoomIdentity); }
+function resetView(){ animateTo({ rot: [...V.rot], k: 1, cx: W / 2, cy: homeCy }, 600); }
 
-svg.on('click', e => {
+/* input: drag to spin, wheel / pinch to zoom, tap to place */
+const ptrs = new Map(); let tap = null, pinch = 0;
+const clampK = k => Math.max(1, Math.min(40, k));
+cv.addEventListener('pointerdown', e => {
+  cancelAnimationFrame(anim); cv.setPointerCapture(e.pointerId);
+  ptrs.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+  tap = ptrs.size === 1 ? { x: e.offsetX, y: e.offsetY, moved: 0 } : null;
+  if (ptrs.size === 2){ const [a, b] = [...ptrs.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); }
+});
+cv.addEventListener('pointermove', e => {
+  const p = ptrs.get(e.pointerId); if (!p) return;
+  const dx = e.offsetX - p.x, dy = e.offsetY - p.y; p.x = e.offsetX; p.y = e.offsetY;
+  if (ptrs.size === 1){
+    if (tap) tap.moved += Math.abs(dx) + Math.abs(dy);
+    const r = R0 * V.k, f = 57.2958 / r;
+    V.rot = [V.rot[0] + dx * f, Math.max(-90, Math.min(90, V.rot[1] - dy * f))];
+  } else if (ptrs.size === 2){
+    const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+    if (pinch) V.k = clampK(V.k * d / pinch);
+    pinch = d;
+  }
+  render();
+});
+const endPtr = e => {
+  const wasTap = tap && tap.moved < 6 && ptrs.size === 1 && e.type === 'pointerup';
+  ptrs.delete(e.pointerId); pinch = 0;
+  if (wasTap) handleTap(e.offsetX, e.offsetY);
+  tap = null;
+};
+cv.addEventListener('pointerup', endPtr); cv.addEventListener('pointercancel', endPtr);
+cv.addEventListener('wheel', e => { e.preventDefault(); cancelAnimationFrame(anim); V.k = clampK(V.k * Math.exp(-e.deltaY * .0016)); render(); }, { passive: false });
+
+function handleTap(x, y){
+  if (S.hint && S.phase === 'guess'){
+    const hit = pins.find(d => d.kind === 'opt' && d._vis && Math.hypot(d._x - x, d._y - y) < 24);
+    if (hit) return pickOption(hit.idx);
+  }
   if (S.phase !== 'guess' || S.hint) return;
-  const [x, y] = d3.pointer(e, svg.node());
-  const p = T.invert([x, y]);
-  const ll = projection.invert(p);
-  if (!ll) return;
+  const ll = projection.invert([x, y]);
+  if (!ll || !isFinite(ll[0]) || !isFinite(ll[1]) || !facing(ll)) return;
   const back = projection(ll);
-  if (!back || Math.hypot(back[0] - p[0], back[1] - p[1]) > 0.5) return; // clicked outside the globe
+  if (Math.hypot(back[0] - x, back[1] - y) > 1) return;   // outside the globe
   S.guess = ll;
   pins = [{ ll, kind: 'guess' }];
-  drawPins();
+  render();
   renderDock();
-});
+}
 
-$('#zin').onclick = () => svg.transition().duration(REDUCE ? 0 : 250).call(zoom.scaleBy, 1.8);
-$('#zout').onclick = () => svg.transition().duration(REDUCE ? 0 : 250).call(zoom.scaleBy, 1 / 1.8);
+const zoomBy = f => animateTo({ rot: [...V.rot], k: clampK(V.k * f), cx: V.cx, cy: V.cy }, 250);
+$('#zin').onclick = () => zoomBy(1.8);
+$('#zout').onclick = () => zoomBy(1 / 1.8);
 $('#zreset').onclick = resetView;
 
 /* ---------- split-flap board ---------- */
@@ -686,9 +741,9 @@ function renderDock(){
       ? (S.guess ? '<strong>Opción ' + 'ABC'[S.hint.picked] + '.</strong> Podés cambiarla antes de confirmar.' : 'Tocá A, B o C en el mapa. <strong>Este vuelo vale la mitad.</strong>')
       : (S.guess ? '<strong>Marca puesta.</strong> Tocá otro punto para moverla.' : 'Tocá el mapa donde creés que está el aeropuerto.');
     dock.innerHTML = `<p>${msg}</p>
-      ${S.hint ? '' : '<button class="ghost" id="hintBtn" title="Marca 3 opciones en el mapa. El puntaje se reduce a la mitad.">3 opciones · ½ puntos</button>'}
+      ${S.hint || S.hintsLeft <= 0 ? '' : '<button class="ghost" id="hintBtn" title="Marca 3 opciones en el globo. El puntaje se reduce a la mitad.">3 opciones · ½ puntos (' + S.hintsLeft + ')</button>'}
       <button class="cta" id="confirmBtn" ${S.guess ? '' : 'disabled'}>Confirmar</button>`;
-    if (!S.hint) $('#hintBtn').onclick = requestOptions;
+    if ($('#hintBtn')) $('#hintBtn').onclick = requestOptions;
     $('#confirmBtn').onclick = confirmGuess;
   } else if (S.phase === 'reveal'){
     const r = S.results[S.i];
@@ -707,13 +762,14 @@ function renderDock(){
 /* ---------- flow ---------- */
 function startGame(){
   S.mode = 'practice'; S.clue = prefs.clue; S.date = todayKey();
-  S.level = 1; S.cum = 0; S.used.clear();
+  S.level = 1; S.cum = 0; S.used.clear(); S.hintsLeft = 2;
   S.rounds = buildRounds(); S.i = 0; S.results = []; S.guess = null;
   $('#menu').hidden = true; $('#summary').hidden = true;
   startRound();
 }
 function requestOptions(){
-  if (S.phase !== 'guess' || S.hint) return;
+  if (S.phase !== 'guess' || S.hint || S.hintsLeft <= 0) return;
+  S.hintsLeft--;
   const a = S.rounds[S.i];
   const far = (b, c) => distKm(b, c) > 600;
   let decoys = [];
@@ -732,7 +788,7 @@ function requestOptions(){
 }
 function drawOptionPins(){
   pins = S.hint.opts.map((o, i) => ({ kind: 'opt', idx: i, ll: [o.lon, o.lat], label: 'ABC'[i], color: S.hint.picked === i ? 'var(--cyan)' : undefined }));
-  drawPins();
+  render();
 }
 function pickOption(i){
   if (S.phase !== 'guess' || !S.hint) return;
@@ -742,15 +798,15 @@ function pickOption(i){
 }
 function nextLevel(){
   S.cum += S.results.reduce((s, r) => s + r.pts, 0);
-  S.level++;
+  S.level++; S.hintsLeft = 2;
   S.rounds = buildRounds(); S.i = 0; S.results = []; S.guess = null;
   startRound();
 }
 function startRound(){
   $('#summary').hidden = true; S.hint = null;
   S.phase = 'guess'; S.guess = null; lines = []; pins = [];
-  landSel.classed('hit', false);
-  drawLines(); drawPins();
+  hitFeat = null;
+  render();
   renderHud(); renderBoard(); renderDock();
   resetView();
 }
@@ -765,11 +821,11 @@ function confirmGuess(){
   const real = [a.lon, a.lat];
   lines = [{ a: S.guess, b: real, color: tone(pts) }];
   pins = [{ ll: S.guess, kind: 'guess' }, { ll: real, kind: 'real', label: a.code }];
-  landSel.classed('hit', d => d3.geoContains(d, real));
-  drawLines(); drawPins();
+  hitFeat = countries.find(d => d3.geoContains(d, real)) || null;
+  render();
   renderHud(); renderBoard(); renderDock();
   const mid = d3.geoInterpolate(S.guess, real)(0.5);
-  focusOn(km < 20 ? [real] : [S.guess, real, mid], km < 20 ? 6 : 7);
+  focusOn(km < 20 ? [real] : [S.guess, real, mid], km < 20 ? 14 : 30);
 }
 function next(){
   if (S.i < ROUNDS - 1){ S.i++; startRound(); }
@@ -794,8 +850,8 @@ function showSummary(){
   const hits = S.results.filter(r => r.km <= HIT_KM).length, passed = hits >= NEED;
   lines = S.results.map(r => ({ a: r.guess, b: [byCode[r.code].lon, byCode[r.code].lat], color: tone(r.pts) }));
   pins = S.results.flatMap(r => [{ ll: r.guess, kind: 'guess' }, { ll: [byCode[r.code].lon, byCode[r.code].lat], kind: 'real', label: r.code, color: tone(r.pts) }]);
-  landSel.classed('hit', false);
-  drawLines(); drawPins(); renderHud();
+  hitFeat = null;
+  render(); renderHud();
 
   const d = new Date(S.date + 'T12:00:00');
   const dateLabel = d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -821,7 +877,7 @@ function showSummary(){
   $('#shareBtn').onclick = share;
   $('#againBtn').onclick = startGame;
   $('#toMenuBtn').onclick = openMenu;
-  requestAnimationFrame(() => focusOn(lines.flatMap(l => [l.a, l.b]), 3));
+  requestAnimationFrame(() => focusOn(lines.flatMap(l => [l.a, l.b]), 4));
 }
 function share(){
   const text = shareText();
@@ -864,7 +920,5 @@ document.addEventListener('keydown', e => {
 /* ---------- boot ---------- */
 let rs; new ResizeObserver(() => { clearTimeout(rs); rs = setTimeout(layout, 60); }).observe(stage);
 layout();
-// the menu opens over a map that already shows where the game takes place
-drawDots();
 syncMenu(); renderHud();
 </script>
