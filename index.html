@@ -625,13 +625,13 @@ const ptrs = new Map(); let tap = null, pinch = 0;
 const clampK = k => Math.max(1, Math.min(40, k));
 cv.addEventListener('pointerdown', e => {
   cancelAnimationFrame(anim); cv.setPointerCapture(e.pointerId);
-  ptrs.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
-  tap = ptrs.size === 1 ? { x: e.offsetX, y: e.offsetY, moved: 0 } : null;
+  ptrs.set(e.pointerId, { x: (e.clientX - cv.getBoundingClientRect().left), y: (e.clientY - cv.getBoundingClientRect().top) });
+  tap = ptrs.size === 1 ? { x: (e.clientX - cv.getBoundingClientRect().left), y: (e.clientY - cv.getBoundingClientRect().top), moved: 0 } : null;
   if (ptrs.size === 2){ const [a, b] = [...ptrs.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); }
 });
 cv.addEventListener('pointermove', e => {
   const p = ptrs.get(e.pointerId); if (!p) return;
-  const dx = e.offsetX - p.x, dy = e.offsetY - p.y; p.x = e.offsetX; p.y = e.offsetY;
+  const dx = (e.clientX - cv.getBoundingClientRect().left) - p.x, dy = (e.clientY - cv.getBoundingClientRect().top) - p.y; p.x = (e.clientX - cv.getBoundingClientRect().left); p.y = (e.clientY - cv.getBoundingClientRect().top);
   if (ptrs.size === 1){
     if (tap) tap.moved += Math.abs(dx) + Math.abs(dy);
     const r = R0 * V.k, f = 57.2958 / r;
@@ -646,7 +646,7 @@ cv.addEventListener('pointermove', e => {
 const endPtr = e => {
   const wasTap = tap && tap.moved < 6 && ptrs.size === 1 && e.type === 'pointerup';
   ptrs.delete(e.pointerId); pinch = 0;
-  if (wasTap) handleTap(e.offsetX, e.offsetY);
+  if (wasTap) handleTap((e.clientX - cv.getBoundingClientRect().left), (e.clientY - cv.getBoundingClientRect().top));
   tap = null;
 };
 cv.addEventListener('pointerup', endPtr); cv.addEventListener('pointercancel', endPtr);
