@@ -145,6 +145,12 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
 @media (max-width:640px){.tk-label{display:none}.ticker{padding:3px 9px}.tk-num{font-size:16px}}
 @media (max-width:360px){.ticker{display:none!important}}
 @media (prefers-reduced-motion:reduce){.tk-strip{transition:none}}
+.limitbox{margin:6px 0 10px;padding:14px;border:1px solid var(--bad);border-radius:12px;background:rgba(255,92,92,.08);text-align:center}
+.limitbox b{display:block;font-size:20px;color:var(--bad);letter-spacing:.02em}
+.limitbox p{margin:6px 0 10px;font-size:16px;line-height:1.3;color:var(--text)}
+.lim-timer{font:600 34px var(--mono);letter-spacing:.06em;font-variant-numeric:tabular-nums;color:var(--text)}
+.limitbox small{display:block;margin-top:2px;font:500 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+#startBtn:disabled{background:var(--panel2);color:var(--faint);cursor:not-allowed}
 .opt{cursor:pointer}
 .opt text{font-size:14px;font-weight:700;pointer-events:none}
 
@@ -330,6 +336,12 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
             <button data-v="hard">Experto</button>
           </div>
         </div>
+      </div>
+      <div class="limitbox" id="limitBox" hidden>
+        <b>El juego llegó a su límite</b>
+        <p>Este dispositivo o esta IP ya jugó el máximo de 20 partidas. Podés jugar desde otro dispositivo o esperar 2 horas.</p>
+        <div class="lim-timer" id="limTimer" aria-live="off">02:00:00</div>
+        <small>Tiempo para volver a jugar</small>
       </div>
       <p class="note" id="menuErr" style="color:var(--bad);margin:6px 0 0"></p>
       <p class="note" id="rankMenuNote"></p>
@@ -614,6 +626,7 @@ function rank(t){
 
 /* ---------- device ---------- */
 const DEVICE = ((matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 820) || /Android.+Mobile|iPhone|iPod/i.test(navigator.userAgent)) ? 'mobile' : 'pc';
+const VID = (() => { try { let v = localStorage.getItem('iata:vid') || ''; if (!v){ v = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('iata:vid', v); } return v; } catch (e) { return ''; } })();
 const DEV_LABEL = { pc: 'Computadora', mobile: 'Celular' };
 const DEV_SECS = { pc: 16, mobile: 20 };
 
@@ -1061,7 +1074,7 @@ async function gameApi(action, body){
     r = await fetch(GAME_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ action, device: DEVICE }, body)) });
     j = await r.json().catch(() => ({}));
   } catch (e){ throw Object.assign(new Error('net'), { code: 'net' }); }
-  if (!r.ok) throw Object.assign(new Error(j.error || 'error'), { code: j.error || 'error', reason: j.reason, status: r.status });
+  if (!r.ok) throw Object.assign(new Error(j.error || 'error'), { code: j.error || 'error', reason: j.reason, status: r.status, until: j.until, scope: j.scope });
   return j;
 }
 function errText(e){
@@ -1102,6 +1115,23 @@ const ticker = {
 };
 function showPlays(n){ if (n >= 0) ticker.set(n); }
 function refreshPlays(){ fetch(STATS_API).then(r => r.json()).then(j => showPlays(j.plays)).catch(() => {}); }
+let limTimer = 0;
+function showLimit(until){
+  try { localStorage.setItem('iata:lock', String(until)); } catch (e) {}
+  const box = $('#limitBox'), btn = $('#startBtn');
+  const tick = () => {
+    const left = Math.max(0, until - Date.now());
+    if (left <= 0){
+      clearInterval(limTimer); box.hidden = true; btn.disabled = false;
+      try { localStorage.removeItem('iata:lock'); } catch (e) {}
+      return;
+    }
+    const sec = Math.ceil(left / 1000);
+    $('#limTimer').textContent = [sec / 3600 | 0, sec / 60 % 60 | 0, sec % 60].map(x => String(x).padStart(2, '0')).join(':');
+  };
+  box.hidden = false; btn.disabled = true; setMenuMsg('');
+  clearInterval(limTimer); limTimer = setInterval(tick, 1000); tick();
+}
 const setMenuMsg = t => { const el = $('#menuErr'); if (el) el.textContent = t || ''; };
 function fatal(e){
   stopTimer(); S.busy = false;
@@ -1115,12 +1145,13 @@ async function startGame(){
     if ($('#menu').hidden) openMenu();
     nickEl.classList.add('bad'); nickEl.focus(); return;
   }
+  try { const lock = Number(localStorage.getItem('iata:lock')); if (lock > Date.now()){ if ($('#menu').hidden) openMenu(); showLimit(lock); return; } } catch (e) {}
   if (S.busy) return;
   S.busy = true; setMenuMsg('');
   const btn = $('#startBtn'), label = btn.textContent;
   btn.disabled = true; btn.textContent = 'Conectando…';
   try {
-    const j = await gameApi('start', { nick, clue: prefs.clue, diff: prefs.diff, region: prefs.region });
+    const j = await gameApi('start', { nick, vid: VID, clue: prefs.clue, diff: prefs.diff, region: prefs.region });
     store.set('iata:nick', nick); showPlays(j.plays);
     Object.assign(S, { nick, dev: DEVICE, token: j.token, clue: prefs.clue, diff: prefs.diff, ranked: prefs.region === 'all', level: 1, cum: 0, i: -1, results: [], hintsLeft: 2, finished: false, rankRes: null, flapShown: '' });
     rdView = null; setTimeout(refreshRankDock, 0);
@@ -1130,6 +1161,7 @@ async function startGame(){
   } catch (e){
     S.busy = false; btn.disabled = false; btn.textContent = label;
     if ($('#menu').hidden) openMenu();
+    if (e.code === 'limit' && e.until){ showLimit(e.until); return; }
     if (e.code === 'nick') nickEl.classList.add('bad');
     setMenuMsg(errText(e));
   }
@@ -1509,12 +1541,9 @@ $('#secsTxt').textContent = DEV_SECS[DEVICE]; $('#tnum').textContent = DEV_SECS[
 $('#nickIn').addEventListener('input', () => $('#nickIn').classList.remove('bad'));
 syncMenu(); renderHud();
 titleFlap.set('IATAJUEGO'); startPlanes(); refreshRankDock();
+try { const lock = Number(localStorage.getItem('iata:lock')); if (lock > Date.now()) showLimit(lock); } catch (e) {}
 setInterval(() => { if (S.phase === 'menu' && !$('#menu').hidden) titleFlap.set('IATAJUEGO'); }, 6000);
 // anonymous usage: a random id kept in this browser tells new visitors from returning ones
 refreshPlays(); setInterval(refreshPlays, 20000);
-{
-  let vid = '';
-  try { vid = localStorage.getItem('iata:vid') || ''; if (!vid){ vid = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('iata:vid', vid); } } catch (e) {}
-  gameApi('visit', { vid }).catch(() => {});
-}
+gameApi('visit', { vid: VID }).catch(() => {});
 </script>
