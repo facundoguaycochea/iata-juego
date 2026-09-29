@@ -1074,6 +1074,7 @@ const STATS_API = 'https://iata-ranking-api.vercel.app/api/stats';
 const ticker = {
   txt: '', cols: [],
   set(n){
+    n = Math.max(Number(n) || 0, this.max || 0); this.max = n;   // never shows a lower number than it already showed
     const str = Number(n).toLocaleString('es-AR');
     const box = $('#tkNum');
     box.setAttribute('aria-label', str + ' veces jugadas');
