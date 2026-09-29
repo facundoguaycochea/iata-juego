@@ -154,6 +154,7 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
 .lim-timer{font:600 34px var(--mono);letter-spacing:.06em;font-variant-numeric:tabular-nums;color:var(--text)}
 .limitbox small{display:block;margin-top:2px;font:500 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 #startBtn:disabled{background:var(--panel2);color:var(--faint);cursor:not-allowed}
+.toast.warn{background:var(--amber);color:var(--amber-ink);max-width:min(92%,460px);text-align:center;line-height:1.25;padding:10px 16px;top:auto;bottom:140px;z-index:9;box-shadow:0 10px 30px rgba(0,0,0,.45)}
 .opt{cursor:pointer}
 .opt text{font-size:14px;font-weight:700;pointer-events:none}
 
@@ -1061,7 +1062,7 @@ function renderDock(){
   } else if (S.phase === 'reveal'){
     const r = S.results[S.i];
     const last = S.i === ROUNDS - 1;
-    const info = r.timeout ? '<b>Se acabó el tiempo</b>' : `Tu marca quedó a <b>${fmt(r.km)} km</b>${r.hinted ? ' · con opciones (½)' : ''}`;
+    const info = r.penalized ? '<b>Saliste de la pantalla: este vuelo no suma puntos</b>' : r.timeout ? '<b>Se acabó el tiempo</b>' : `Tu marca quedó a <b>${fmt(r.km)} km</b>${r.hinted ? ' · con opciones (½)' : ''}${r.away ? ' · aviso: saliste de la pantalla' : ''}`;
     dock.innerHTML = `<div class="res">
         <span class="pts" style="color:${tone(r.pts)}">+${r.pts}</span>
         <span class="km">${info}</span>
@@ -1160,7 +1161,7 @@ async function startGame(){
   try {
     const j = await gameApi('start', { nick, vid: VID, clue: prefs.clue, diff: prefs.diff, region: prefs.region });
     store.set('iata:nick', nick); showPlays(j.plays);
-    Object.assign(S, { nick, dev: DEVICE, token: j.token, clue: prefs.clue, diff: prefs.diff, ranked: prefs.region === 'all', level: 1, cum: 0, i: -1, results: [], hintsLeft: 2, finished: false, rankRes: null, flapShown: '' });
+    Object.assign(S, { strikes: 0, nick, dev: DEVICE, token: j.token, clue: prefs.clue, diff: prefs.diff, ranked: prefs.region === 'all', level: 1, cum: 0, i: -1, results: [], hintsLeft: 2, finished: false, rankRes: null, flapShown: '' });
     rdView = null; setTimeout(refreshRankDock, 0);
     $('#menu').hidden = true; $('#summary').hidden = true;
     S.busy = false; btn.disabled = false; btn.textContent = label;
@@ -1312,6 +1313,25 @@ async function refreshRankDock(){
 setInterval(refreshRankDock, 20000);
 addEventListener('resize', () => refreshRankDock());
 
+/* ---------- anti-lookup: leaving the screen during a flight ---------- */
+let awayStart = 0, awayTotal = 0;
+const inFlight = () => S.phase === 'guess' || S.phase === 'hinting' || S.phase === 'sending';
+function awayNow(){ return awayTotal + (awayStart ? performance.now() - awayStart : 0); }
+function leaveScreen(){ if (inFlight() && !awayStart) awayStart = performance.now(); }
+function backOnScreen(){
+  if (!awayStart) return;
+  const d = performance.now() - awayStart; awayStart = 0;
+  if (!inFlight()) return;
+  awayTotal += d;
+  if (d >= 1000 && !S.awayShown){
+    S.awayShown = true;
+    toast((S.strikes || 0) >= 1 ? 'Saliste de la pantalla: este aeropuerto no va a sumar puntos.' : 'Aviso: saliste de la pantalla durante el vuelo. Si vuelve a pasar, ese aeropuerto no suma puntos.', 'warn');
+  }
+}
+document.addEventListener('visibilitychange', () => (document.hidden ? leaveScreen() : backOnScreen()));
+addEventListener('blur', leaveScreen);
+addEventListener('focus', backOnScreen);
+
 /* ---------- timer ---------- */
 let TIME_LIMIT = DEV_SECS[DEVICE];   // seconds per airport (the server confirms it on every flight)
 let tEnd = 0, tInt = 0;
@@ -1330,12 +1350,13 @@ function tick(){
   num.style.color = left < 5 ? 'var(--bad)' : '';
   if (left <= 0){ stopTimer(); if (S.phase === 'guess') confirmGuess(); else if (S.phase === 'hinting') S.timeUp = true; }
 }
-const isHit = r => r.km != null && r.km <= HIT_KM;
+const isHit = r => r.km != null && !r.penalized && r.km <= HIT_KM;
 
 /* ---------- flow ---------- */
 async function startRound(){
   $('#summary').hidden = true;
   S.hint = null; S.timeUp = false; S.i++;
+  awayStart = 0; awayTotal = 0; S.awayShown = false;
   S.phase = 'loading'; S.guess = null; S.flight = null; lines = []; pins = []; hitFeat = null;
   $('#board').hidden = true;
   render(); renderHud(); renderDock(); resetView();
@@ -1351,11 +1372,12 @@ async function confirmGuess(){
   if (S.phase !== 'guess') return;
   S.phase = 'sending'; stopTimer(); renderDock();
   try {
-    const j = await gameApi('guess', { token: S.token, guess: S.guess, pick: S.hint ? S.hint.picked : null });
+    const j = await gameApi('guess', { token: S.token, guess: S.guess, pick: S.hint ? S.hint.picked : null, away: Math.round(awayNow()) });
     S.token = j.token;
     const r = j.result, real = j.real, rl = [real.lon, real.lat];
     const marked = !!S.guess && !r.timeout;
-    S.results[S.i] = { code: real.code, name: real.name, city: real.city, country: real.country, lon: real.lon, lat: real.lat, km: r.km, pts: r.pts, guess: marked ? S.guess : null, hinted: r.hinted, timeout: r.timeout };
+    S.results[S.i] = { code: real.code, name: real.name, city: real.city, country: real.country, lon: real.lon, lat: real.lat, km: r.km, pts: r.pts, guess: marked ? S.guess : null, hinted: r.hinted, timeout: r.timeout, away: r.away, penalized: r.penalized };
+    S.strikes = r.strikes || 0;
     S.phase = 'reveal';
     lines = marked ? [{ a: S.guess, b: rl, color: tone(r.pts) }] : [];
     pins = (marked ? [{ ll: S.guess, kind: 'guess' }] : []).concat([{ ll: rl, kind: 'real', label: real.code }]);
@@ -1438,7 +1460,7 @@ function showSummary(){
   const rows = S.results.map(r => `
       <div class="row"><i style="background:${tone(r.pts)}"></i><span class="c">${esc(r.code)}</span>
         <span class="n">${esc(r.city)}<small>${esc(r.name)}</small></span>
-        <span class="d">${r.timeout ? 'sin tiempo' : fmt(r.km) + ' km' + (r.hinted ? ' ½' : '')}</span><span class="p" style="color:${tone(r.pts)}">${r.pts}</span></div>`).join('');
+        <span class="d">${r.penalized ? 'sin puntos (salió)' : r.timeout ? 'sin tiempo' : fmt(r.km) + ' km' + (r.hinted ? ' ½' : '')}</span><span class="p" style="color:${tone(r.pts)}">${r.pts}</span></div>`).join('');
   const head = done
     ? `<div class="total"><b id="sumTotal">${run}</b><span>puntos</span></div>
        <p class="rank" style="color:var(--amber)">${rank(run / S.level)} · nivel ${S.level}</p>
@@ -1498,9 +1520,9 @@ function share(){
   const fallback = () => { const ta = $('#copyArea'); ta.hidden = false; ta.value = text; ta.focus(); ta.select(); };
   try { navigator.clipboard.writeText(text).then(done, fallback); } catch(e){ fallback(); }
 }
-function toast(msg){
-  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
-  stage.appendChild(t); setTimeout(() => t.remove(), 1800);
+function toast(msg, kind){
+  const t = document.createElement('div'); t.className = 'toast' + (kind ? ' ' + kind : ''); t.textContent = msg;
+  stage.appendChild(t); setTimeout(() => t.remove(), kind === 'warn' ? 6500 : 1800);
 }
 
 /* ---------- menu ---------- */
