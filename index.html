@@ -306,7 +306,7 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
 
       <ol class="howto">
         <li><b>01</b><span>5 aeropuertos por nivel y solo 12 segundos para cada uno. Cada partida sale distinta: los códigos aparecen siempre al azar.</span></li>
-        <li><b>02</b><span>Marcá un punto en el globo y confirmá. Los puntos amarillos son los aeropuertos del juego: al pasar el mouse cambian de color y, si tocás uno, tu marca queda justo ahí. Arrastrá el globo para girarlo. Si dudás, pedí 3 opciones (máximo 2 por nivel): se marcan A, B y C en el globo, pero ese vuelo vale la mitad de puntos.</span></li>
+        <li><b>02</b><span>Marcá un punto en el globo y confirmá. Los puntos amarillos son los aeropuertos de la región y dificultad que elegiste: al pasar el mouse cambian de color y, si tocás uno, tu marca queda justo ahí. Arrastrá el globo para girarlo. Si dudás, pedí 3 opciones (máximo 2 por nivel): se marcan A, B y C en el globo, pero ese vuelo vale la mitad de puntos.</span></li>
         <li><b>03</b><span>Hasta 100 puntos por vuelo. Si acertás 3 de 5 (a menos de 500 km) pasás al siguiente nivel; si no, se termina.</span></li>
       </ol>
     </div>
@@ -603,7 +603,7 @@ function buildRounds(){
   const tiers = { easy:[1], mix:[1,2,3], hard:[2,3] }[prefs.diff];
   let f = pool.filter(a => tiers.includes(a.tier) && !S.used.has(a.code));
   if (f.length < ROUNDS) f = pool.filter(a => !S.used.has(a.code));
-  if (f.length < ROUNDS){ S.used.clear(); f = pool; }
+  if (f.length < ROUNDS){ S.used.clear(); f = pool.filter(a => tiers.includes(a.tier)); if (f.length < ROUNDS) f = pool; }
   const out = pickFrom(f, ROUNDS, rand);
   out.forEach(a => S.used.add(a.code));
   return out;
@@ -637,8 +637,9 @@ AIRPORTS.forEach(a => { a.v = toVec([a.lon, a.lat]); });
 let cvec = toVec(centre());
 const facingV = v => v[0] * cvec[0] + v[1] * cvec[1] + v[2] * cvec[2] > 0.02;
 const facing = ll => { cvec = toVec(centre()); return facingV(toVec(ll)); };
-let interacting = false, idleT = 0, hoverA = null, dotRegion = 'all';
-const inRegion = a => dotRegion === 'all' || a.region === dotRegion;
+let interacting = false, idleT = 0, hoverA = null, dotRegion = 'all', dotDiff = 'mix';
+const DIFF_TIERS = { easy: [1], mix: [1, 2, 3], hard: [2, 3] };
+const inRegion = a => (dotRegion === 'all' || a.region === dotRegion) && DIFF_TIERS[dotDiff].includes(a.tier);
 const REGION_VIEW = { A: [-70, 0], E: [15, 50], M: [35, 10], P: [105, 0] };
 function focusRegion(){
   const c = REGION_VIEW[dotRegion];
@@ -1061,7 +1062,7 @@ function requestOptions(){
   const a = S.rounds[S.i];
   const far = (b, c) => distKm(b, c) > 600;
   let decoys = [];
-  const pools = [AIRPORTS.filter(b => b.region === a.region), AIRPORTS.filter(inRegion)];
+  const pools = [AIRPORTS.filter(b => inRegion(b) && b.region === a.region), AIRPORTS.filter(inRegion)];
   for (const pool of pools){
     const cand = pool.filter(b => b.code !== a.code && far(a, b)).sort(() => Math.random() - .5);
     for (const b of cand){ if (decoys.length < 2 && decoys.every(c => far(c, b))) decoys.push(b); }
@@ -1395,7 +1396,7 @@ function updateRankNote(){
   else { el.textContent = 'Con una región elegida no se guarda en el ranking.'; el.style.color = 'var(--muted)'; }
 }
 function syncMenu(){
-  dotRegion = prefs.region; render();
+  dotRegion = prefs.region; dotDiff = prefs.diff; render();
   updateRankNote();
   document.querySelectorAll('.seg').forEach(seg => {
     const key = seg.dataset.key;
