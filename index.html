@@ -324,7 +324,7 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
       <button class="ghost start2" id="rankBtn">Ver ranking</button>
 
       <ol class="howto">
-        <li><b>01</b><span>5 aeropuertos por nivel y solo 16 segundos para cada uno. Cada partida sale distinta: los códigos aparecen siempre al azar.</span></li>
+        <li><b>01</b><span>5 aeropuertos por nivel y solo <b id="secsTxt">16</b> segundos para cada uno. Cada partida sale distinta: los códigos aparecen siempre al azar.</span></li>
         <li><b>02</b><span>Marcá un punto en el globo y confirmá. Los puntos amarillos son los aeropuertos de la región y dificultad que elegiste: al pasar el mouse cambian de color y, si tocás uno, tu marca queda justo ahí. Arrastrá el globo para girarlo. Si dudás, pedí 3 opciones (máximo 2 por nivel): se marcan A, B y C en el globo, pero ese vuelo vale la mitad de puntos.</span></li>
         <li><b>03</b><span>Hasta 100 puntos por vuelo. Si acertás 3 de 5 (a menos de 500 km) pasás al siguiente nivel; si no, se termina.</span></li>
       </ol>
@@ -337,6 +337,7 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
   <aside class="rankdock" id="rankDock" hidden>
     <div class="rd-head"><span class="eyebrow">Ranking mundial · top 15</span><b id="rdBoard"></b></div>
     <div class="rd-tabs"><div class="rd-seg" id="rdClue"><button data-v="code">IATA</button><button data-v="name">Nombre</button></div>
+      <div class="rd-seg" id="rdDev"><button data-v="pc">Computadora</button><button data-v="mobile">Celular</button></div>
       <div class="rd-seg" id="rdDiff"><button data-v="easy">Hubs</button><button data-v="mix">Mixto</button><button data-v="hard">Experto</button></div></div>
     <ol class="rank-list" id="rdList"><li class="empty">Cargando…</li></ol>
   </aside>
@@ -349,6 +350,8 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
         <div class="seg" id="rkClue"><button data-v="code">Código IATA</button><button data-v="name">Nombre</button></div></div>
       <div class="field"><span>Dificultad</span>
         <div class="seg" id="rkDiff"><button data-v="easy">Grandes hubs</button><button data-v="mix">Mixto</button><button data-v="hard">Experto</button></div></div>
+      <div class="field"><span>Dispositivo</span>
+        <div class="seg" id="rkDev"><button data-v="pc">Computadora</button><button data-v="mobile">Celular</button></div></div>
       <ol class="rank-list" id="rkList"></ol>
       <p class="note" id="rkNote"></p>
       <button class="ghost start2" id="rkClose">Volver</button>
@@ -595,6 +598,11 @@ function rank(t){
   return t >= 450 ? 'Comandante' : t >= 350 ? 'Primer oficial' : t >= 250 ? 'Controlador aéreo'
        : t >= 150 ? 'Pasajero frecuente' : 'Primer vuelo';
 }
+
+/* ---------- device ---------- */
+const DEVICE = ((matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 820) || /Android.+Mobile|iPhone|iPod/i.test(navigator.userAgent)) ? 'mobile' : 'pc';
+const DEV_LABEL = { pc: 'Computadora', mobile: 'Celular' };
+const DEV_SECS = { pc: 16, mobile: 20 };
 
 /* ---------- state ---------- */
 const HIT_KM = 500, NEED = 3;
@@ -1037,7 +1045,7 @@ const GAME_API = 'https://iata-ranking-api.vercel.app/api/game';
 async function gameApi(action, body){
   let r, j = {};
   try {
-    r = await fetch(GAME_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ action }, body)) });
+    r = await fetch(GAME_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ action, device: DEVICE }, body)) });
     j = await r.json().catch(() => ({}));
   } catch (e){ throw Object.assign(new Error('net'), { code: 'net' }); }
   if (!r.ok) throw Object.assign(new Error(j.error || 'error'), { code: j.error || 'error', reason: j.reason, status: r.status });
@@ -1069,7 +1077,7 @@ async function startGame(){
   try {
     const j = await gameApi('start', { nick, clue: prefs.clue, diff: prefs.diff, region: prefs.region });
     store.set('iata:nick', nick);
-    Object.assign(S, { nick, token: j.token, clue: prefs.clue, diff: prefs.diff, ranked: prefs.region === 'all', level: 1, cum: 0, i: -1, results: [], hintsLeft: 2, finished: false, rankRes: null, flapShown: '' });
+    Object.assign(S, { nick, dev: DEVICE, token: j.token, clue: prefs.clue, diff: prefs.diff, ranked: prefs.region === 'all', level: 1, cum: 0, i: -1, results: [], hintsLeft: 2, finished: false, rankRes: null, flapShown: '' });
     rdView = null; setTimeout(refreshRankDock, 0);
     $('#menu').hidden = true; $('#summary').hidden = true;
     S.busy = false; btn.disabled = false; btn.textContent = label;
@@ -1199,25 +1207,29 @@ const titleFlap = makeSplitFlap($('#titleFlap'));
 
 /* ---------- always-visible ranking (bottom right) ---------- */
 let rdView = null;
-document.querySelectorAll('#rdClue button').forEach(b => b.onclick = () => { rdView = { clue: b.dataset.v, diff: (rdView || (S.phase === 'menu' ? prefs : S)).diff }; refreshRankDock(); });
-document.querySelectorAll('#rdDiff button').forEach(b => b.onclick = () => { rdView = { clue: (rdView || (S.phase === 'menu' ? prefs : S)).clue, diff: b.dataset.v }; refreshRankDock(); });
+const dockBase = () => (S.phase === 'menu' ? prefs : S);
+const curView = () => rdView || { clue: dockBase().clue, diff: dockBase().diff, dev: DEVICE };
+document.querySelectorAll('#rdClue button').forEach(b => b.onclick = () => { rdView = Object.assign({}, curView(), { clue: b.dataset.v }); refreshRankDock(); });
+document.querySelectorAll('#rdDiff button').forEach(b => b.onclick = () => { rdView = Object.assign({}, curView(), { diff: b.dataset.v }); refreshRankDock(); });
+document.querySelectorAll('#rdDev button').forEach(b => b.onclick = () => { rdView = Object.assign({}, curView(), { dev: b.dataset.v }); refreshRankDock(); });
 async function refreshRankDock(){
   const dock = $('#rankDock'), inMenu = S.phase === 'menu';
   const show = innerWidth >= 1100 && S.phase !== 'done' && (inMenu || innerWidth >= 1300);
   dock.hidden = !show; if (!show) return;
-  const base = inMenu ? prefs : S, view = rdView || { clue: base.clue, diff: base.diff };
-  const clue = view.clue, diff = view.diff, key = boardKey(clue, diff);
+  const view = curView(), clue = view.clue, diff = view.diff, dev = view.dev, key = boardKey(clue, diff, dev);
   document.querySelectorAll('#rdClue button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === clue)));
   document.querySelectorAll('#rdDiff button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === diff)));
-  $('#rdBoard').textContent = CLUE_LABEL[clue] + ' · ' + DIFF_LABEL[diff];
+  document.querySelectorAll('#rdDev button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === dev)));
+  $('#rdBoard').textContent = CLUE_LABEL[clue] + ' · ' + DIFF_LABEL[diff] + ' · ' + DEV_LABEL[dev];
   const list = await rankStore.load(key);
-  if (key === boardKey((rdView || base).clue, (rdView || base).diff)) $('#rdList').innerHTML = rankHtml(list, S.rankRes && S.rankRes.entry && S.rankRes.entry.id);
+  const now = curView();
+  if (key === boardKey(now.clue, now.diff, now.dev)) $('#rdList').innerHTML = rankHtml(list, S.rankRes && S.rankRes.entry && S.rankRes.entry.id);
 }
 setInterval(refreshRankDock, 20000);
 addEventListener('resize', () => refreshRankDock());
 
 /* ---------- timer ---------- */
-const TIME_LIMIT = 16;   // seconds per airport
+let TIME_LIMIT = DEV_SECS[DEVICE];   // seconds per airport (the server confirms it on every flight)
 let tEnd = 0, tInt = 0;
 function stopTimer(){ clearInterval(tInt); tInt = 0; }
 function resumeTimer(){ clearInterval(tInt); tInt = setInterval(tick, 100); tick(); }
@@ -1245,7 +1257,7 @@ async function startRound(){
   render(); renderHud(); renderDock(); resetView();
   try {
     const j = await gameApi('flight', { token: S.token });
-    S.token = j.token; S.flight = j.clue;
+    S.token = j.token; S.flight = j.clue; TIME_LIMIT = (j.ms || TIME_LIMIT * 1000) / 1000;
     S.phase = 'guess';
     renderHud(); renderBoard(); renderDock();
     startTimer();
@@ -1286,7 +1298,7 @@ const RANK_API = 'https://iata-ranking-api.vercel.app/api/ranking';   // read-on
 const RANK_TOP = 15;
 const CLUE_LABEL = { code: 'Código IATA', name: 'Nombre' };
 const DIFF_LABEL = { easy: 'Grandes hubs', mix: 'Mixto', hard: 'Experto' };
-const boardKey = (clue, diff) => `${clue}:${diff}`;
+const boardKey = (clue, diff, dev) => `${clue}:${diff}${dev === 'mobile' ? ':m' : ''}`;
 const sortBoard = list => list.sort((x, y) => y.s - x.s || y.l - x.l || x.t - y.t).slice(0, RANK_TOP);
 const rankStore = {
   async load(key){
@@ -1301,21 +1313,23 @@ function rankHtml(list, mine){
   return list.map((e, i) => `<li class="${e.id === mine ? 'me' : ''}"><b class="pos">${i + 1}</b><span class="nm">${esc(e.n)}</span><span class="lv">Nv ${e.l}</span><span class="sc">${e.s}</span></li>`).join('');
 }
 const rankNote = () => RANK_API ? 'Ranking mundial.' : 'Por ahora este ranking se guarda solo en este dispositivo.';
-async function openRanking(clue, diff){
-  RK.clue = clue || RK.clue; RK.diff = diff || RK.diff;
+async function openRanking(clue, diff, dev){
+  RK.clue = clue || RK.clue; RK.diff = diff || RK.diff; RK.dev = dev || RK.dev;
   $('#rankOv').hidden = false;
   document.querySelectorAll('#rkClue button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === RK.clue)));
   document.querySelectorAll('#rkDiff button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === RK.diff)));
+  document.querySelectorAll('#rkDev button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === RK.dev)));
   $('#rkList').innerHTML = '<li class="empty">Cargando…</li>';
-  const key = boardKey(RK.clue, RK.diff), list = await rankStore.load(key);
-  if (key === boardKey(RK.clue, RK.diff)) $('#rkList').innerHTML = rankHtml(list);
+  const key = boardKey(RK.clue, RK.diff, RK.dev), list = await rankStore.load(key);
+  if (key === boardKey(RK.clue, RK.diff, RK.dev)) $('#rkList').innerHTML = rankHtml(list);
   $('#rkNote').textContent = rankNote();
 }
-const RK = { clue: 'code', diff: 'mix' };
-document.querySelectorAll('#rkClue button').forEach(b => b.onclick = () => openRanking(b.dataset.v, null));
-document.querySelectorAll('#rkDiff button').forEach(b => b.onclick = () => openRanking(null, b.dataset.v));
+const RK = { clue: 'code', diff: 'mix', dev: DEVICE };
+document.querySelectorAll('#rkClue button').forEach(b => b.onclick = () => openRanking(b.dataset.v, null, null));
+document.querySelectorAll('#rkDiff button').forEach(b => b.onclick = () => openRanking(null, b.dataset.v, null));
+document.querySelectorAll('#rkDev button').forEach(b => b.onclick = () => openRanking(null, null, b.dataset.v));
 $('#rkClose').onclick = () => { $('#rankOv').hidden = true; };
-$('#rankBtn').onclick = () => openRanking(prefs.clue, prefs.diff);
+$('#rankBtn').onclick = () => openRanking(prefs.clue, prefs.diff, DEVICE);
 
 function shareText(){
   const total = S.results.reduce((s, r) => s + r.pts, 0);
@@ -1350,12 +1364,12 @@ function showSummary(){
        <p class="next" style="margin:-8px 0 14px">Acierto = a menos de ${HIT_KM} km. Necesitás ${NEED} de 5 para seguir. Puntos: ${run}</p>`;
   const save = done && S.ranked ? `
     <div class="save" id="saveBox">
-      <div class="eyebrow">Ranking${RANK_API ? ' mundial' : ''} · ${CLUE_LABEL[S.clue]} · ${DIFF_LABEL[S.diff]}</div>
+      <div class="eyebrow">Ranking${RANK_API ? ' mundial' : ''} · ${CLUE_LABEL[S.clue]} · ${DIFF_LABEL[S.diff]} · ${DEV_LABEL[S.dev || DEVICE]}</div>
       <p class="next" id="saveMsg" style="margin:8px 0 6px">Guardando a <b>${esc(S.nick)}</b>…</p>
       <ol class="rank-list" id="sumRank"></ol>
     </div>` : (done ? '<p class="next">Jugaste con una región elegida: esta partida no entra al ranking.</p>' : '');
   $('#summaryCard').innerHTML = `
-    <div class="eyebrow">Nivel ${S.level} · ${CLUE_LABEL[S.clue]} · ${DIFF_LABEL[S.diff]}</div>
+    <div class="eyebrow">Nivel ${S.level} · ${CLUE_LABEL[S.clue]} · ${DIFF_LABEL[S.diff]} · ${DEV_LABEL[S.dev || DEVICE]}</div>
     ${head}
     <div class="rows">${rows}</div>
     ${save}
@@ -1410,7 +1424,7 @@ function savePrefs(){ store.set('iata:prefs', prefs); }
 function updateRankNote(){
   if (typeof refreshRankDock === 'function') refreshRankDock();
   const el = $('#rankMenuNote'); if (!el) return;
-  if (prefs.region === 'all'){ el.textContent = 'Esta partida entra al ranking: ' + CLUE_LABEL[prefs.clue] + ' · ' + DIFF_LABEL[prefs.diff]; el.style.color = 'var(--good)'; }
+  if (prefs.region === 'all'){ el.textContent = 'Esta partida entra al ranking: ' + CLUE_LABEL[prefs.clue] + ' · ' + DIFF_LABEL[prefs.diff] + ' · ' + DEV_LABEL[DEVICE] + ' (' + DEV_SECS[DEVICE] + ' s por aeropuerto)'; el.style.color = 'var(--good)'; }
   else { el.textContent = 'Con una región elegida no se guarda en el ranking.'; el.style.color = 'var(--muted)'; }
 }
 function syncMenu(){
@@ -1422,7 +1436,7 @@ function syncMenu(){
   });
 }
 document.querySelectorAll('.seg').forEach(seg => seg.addEventListener('click', e => {
-  const b = e.target.closest('button'); if (!b) return;
+  const b = e.target.closest('button'); if (!b || !seg.dataset.key) return;
   prefs[seg.dataset.key] = b.dataset.v; savePrefs(); rdView = null; syncMenu();
   if (seg.dataset.key === 'region') focusRegion();
 }));
@@ -1446,6 +1460,7 @@ document.addEventListener('keydown', e => {
 let rs; new ResizeObserver(() => { clearTimeout(rs); rs = setTimeout(layout, 60); }).observe(stage);
 layout();
 $('#nickIn').value = store.get('iata:nick') || '';
+$('#secsTxt').textContent = DEV_SECS[DEVICE]; $('#tnum').textContent = DEV_SECS[DEVICE] + ' s';
 $('#nickIn').addEventListener('input', () => $('#nickIn').classList.remove('bad'));
 syncMenu(); renderHud();
 titleFlap.set('IATAJUEGO'); startPlanes(); refreshRankDock();
