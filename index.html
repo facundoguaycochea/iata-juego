@@ -271,7 +271,7 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
 
   <div class="board" id="board" hidden>
     <div class="board-top"><span id="boardLeft">Vuelo 1/5</span><b id="boardRight">Destino</b></div>
-    <div class="timer" id="timer"><span id="tnum">12 s</span><div class="tbar"><i id="tbar"></i></div></div>
+    <div class="timer" id="timer"><span id="tnum">16 s</span><div class="tbar"><i id="tbar"></i></div></div>
     <div class="flaps" id="flaps"></div>
     <div class="board-sub" id="boardSub" hidden></div>
   </div>
@@ -324,7 +324,7 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
       <button class="ghost start2" id="rankBtn">Ver ranking</button>
 
       <ol class="howto">
-        <li><b>01</b><span>5 aeropuertos por nivel y solo 12 segundos para cada uno. Cada partida sale distinta: los códigos aparecen siempre al azar.</span></li>
+        <li><b>01</b><span>5 aeropuertos por nivel y solo 16 segundos para cada uno. Cada partida sale distinta: los códigos aparecen siempre al azar.</span></li>
         <li><b>02</b><span>Marcá un punto en el globo y confirmá. Los puntos amarillos son los aeropuertos de la región y dificultad que elegiste: al pasar el mouse cambian de color y, si tocás uno, tu marca queda justo ahí. Arrastrá el globo para girarlo. Si dudás, pedí 3 opciones (máximo 2 por nivel): se marcan A, B y C en el globo, pero ese vuelo vale la mitad de puntos.</span></li>
         <li><b>03</b><span>Hasta 100 puntos por vuelo. Si acertás 3 de 5 (a menos de 500 km) pasás al siguiente nivel; si no, se termina.</span></li>
       </ol>
@@ -1217,7 +1217,7 @@ setInterval(refreshRankDock, 20000);
 addEventListener('resize', () => refreshRankDock());
 
 /* ---------- timer ---------- */
-const TIME_LIMIT = 12;   // seconds per airport
+const TIME_LIMIT = 16;   // seconds per airport
 let tEnd = 0, tInt = 0;
 function stopTimer(){ clearInterval(tInt); tInt = 0; }
 function resumeTimer(){ clearInterval(tInt); tInt = setInterval(tick, 100); tick(); }
