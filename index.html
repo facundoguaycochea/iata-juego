@@ -636,7 +636,7 @@ function rank(t){
 const DEVICE = ((matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 820) || /Android.+Mobile|iPhone|iPod/i.test(navigator.userAgent)) ? 'mobile' : 'pc';
 const VID = (() => { try { let v = localStorage.getItem('iata:vid') || ''; if (!v){ v = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('iata:vid', v); } return v; } catch (e) { return ''; } })();
 const DEV_LABEL = { pc: 'Computadora', mobile: 'Celular' };
-const DEV_SECS = { pc: 15, mobile: 15 };
+const DEV_SECS = { pc: 14, mobile: 14 };
 
 /* ---------- state ---------- */
 const HIT_KM = 500, NEED = 3;
