@@ -19,7 +19,7 @@
 html{height:100%;box-sizing:border-box}
 *,*::before,*::after{box-sizing:border-box}
 body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:var(--display);font-size:16px;overflow:hidden;
-  display:grid;grid-template-rows:auto 1fr}
+  display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto 1fr}
 button{font:inherit;color:inherit;cursor:pointer}
 button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 
@@ -233,6 +233,20 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
   #summary{place-items:end stretch;background:linear-gradient(180deg,transparent 0 30%,rgba(6,11,17,.55))}
   #summary .card{align-self:end;max-height:68%;width:100%}
   .total b{font-size:56px}
+}
+@media (max-width:420px){
+  .bar{gap:8px;padding:8px 10px}
+  .brand{font-size:17px;gap:5px;min-width:0}
+  .brand svg{width:18px;height:18px}
+  .rounds{gap:4px}
+  .rounds i{width:9px;height:9px}
+  .score span{font-size:9px}
+  .score b{font-size:20px}
+  .iconbtn{padding:5px 9px;font-size:14px}
+}
+@media (max-width:350px){
+  .score span{display:none}
+  .rounds{display:none}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
