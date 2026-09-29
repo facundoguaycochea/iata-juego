@@ -855,13 +855,13 @@ function safeArea(){
   if (!$('#summary').hidden && innerWidth <= 640) return { top: 10, bottom: $('#summaryCard').getBoundingClientRect().height + 10, right: 0 };
   return { top: top + 10, bottom: bottom + 10, right };
 }
-function focusOn(coords, maxK = 12){
+function focusOn(coords, maxK = 12, minK = 1){
   const c = coords.length === 1 ? coords[0] : d3.geoCentroid({ type: 'MultiPoint', coordinates: coords });
   const maxd = d3.max(coords, p => d3.geoDistance(c, p));
   const sa = safeArea(), aw = W - sa.right, ah = H - sa.top - sa.bottom;
   const half = Math.max(60, Math.min(aw, ah) / 2 - 50);
   const theta = Math.max(maxd * 1.35, .02);
-  const k = theta >= 1.2 ? 1 : Math.max(1, Math.min(maxK, half / (R0 * Math.sin(theta))));
+  const k = theta >= 1.2 ? Math.max(minK, Math.min(1, half / R0)) : Math.max(minK, Math.min(maxK, half / (R0 * Math.sin(theta))));
   animateTo({ rot: [-c[0], -c[1]], k, cx: aw / 2, cy: sa.top + ah / 2 });
 }
 function resetView(){
@@ -1386,7 +1386,7 @@ function showSummary(){
       });
     }
   }
-  requestAnimationFrame(() => focusOn(pins.map(p => p.ll), 4));
+  requestAnimationFrame(() => focusOn(pins.map(p => p.ll), 4, innerWidth <= 640 ? .45 : 1));
 }
 function share(){
   const text = shareText();
