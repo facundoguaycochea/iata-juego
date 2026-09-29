@@ -130,6 +130,9 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
 @keyframes sfTopDown{from{transform:rotateX(0)}to{transform:rotateX(-90deg)}}
 @keyframes sfBotUp{from{transform:rotateX(90deg)}to{transform:rotateX(0)}}
 .overlay>.card{margin-block:auto;min-width:0}
+.credit{position:absolute;left:16px;bottom:12px;z-index:8;pointer-events:none;font:500 12px var(--mono);letter-spacing:.06em;color:var(--muted);text-shadow:0 1px 3px rgba(0,0,0,.7)}
+.credit-m{display:none;margin:14px 0 0;text-align:center;font:500 12px var(--mono);letter-spacing:.06em;color:var(--muted)}
+@media (max-width:640px){.credit{display:none}.credit-m{display:block}}
 .opt{cursor:pointer}
 .opt text{font-size:14px;font-weight:700;pointer-events:none}
 
@@ -325,8 +328,11 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
         <li><b>02</b><span>Marcá un punto en el globo y confirmá. Los puntos amarillos son los aeropuertos de la región y dificultad que elegiste: al pasar el mouse cambian de color y, si tocás uno, tu marca queda justo ahí. Arrastrá el globo para girarlo. Si dudás, pedí 3 opciones (máximo 2 por nivel): se marcan A, B y C en el globo, pero ese vuelo vale la mitad de puntos.</span></li>
         <li><b>03</b><span>Hasta 100 puntos por vuelo. Si acertás 3 de 5 (a menos de 500 km) pasás al siguiente nivel; si no, se termina.</span></li>
       </ol>
+      <p class="credit-m">by facundo guayco</p>
     </div>
   </div>
+
+  <div class="credit">by facundo guayco</div>
 
   <aside class="rankdock" id="rankDock" hidden>
     <div class="rd-head"><span class="eyebrow">Ranking mundial · top 15</span><b id="rdBoard"></b></div>
