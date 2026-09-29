@@ -602,7 +602,7 @@ function rank(t){
 /* ---------- device ---------- */
 const DEVICE = ((matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 820) || /Android.+Mobile|iPhone|iPod/i.test(navigator.userAgent)) ? 'mobile' : 'pc';
 const DEV_LABEL = { pc: 'Computadora', mobile: 'Celular' };
-const DEV_SECS = { pc: 16, mobile: 20 };
+const DEV_SECS = { pc: 20, mobile: 20 };
 
 /* ---------- state ---------- */
 const HIT_KM = 500, NEED = 3;
