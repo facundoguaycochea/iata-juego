@@ -135,6 +135,16 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
 @media (max-width:640px){.credit{display:none}.credit-m{display:block}}
 .plays{margin:0 0 10px;font:500 12px var(--mono);letter-spacing:.06em;color:var(--muted);text-align:center}
 .plays b{color:var(--amber);font-weight:600;font-size:14px}
+.ticker{display:flex;align-items:center;gap:8px;padding:4px 12px 4px 10px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);white-space:nowrap}
+.tk-num{display:inline-flex;align-items:center;font:600 19px/1.15 var(--display);letter-spacing:.02em;font-variant-numeric:tabular-nums;color:var(--text)}
+.tk-col{display:inline-block;height:1.15em;overflow:hidden}
+.tk-strip{display:flex;flex-direction:column;transition:transform 1s cubic-bezier(.16,1,.3,1)}
+.tk-strip span{display:block;height:1.15em;text-align:center}
+.tk-sep{color:var(--muted);padding:0 1px}
+.tk-label{font:500 10.5px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+@media (max-width:640px){.tk-label{display:none}.ticker{padding:3px 9px}.tk-num{font-size:16px}}
+@media (max-width:360px){.ticker{display:none!important}}
+@media (prefers-reduced-motion:reduce){.tk-strip{transition:none}}
 .opt{cursor:pointer}
 .opt text{font-size:14px;font-weight:700;pointer-events:none}
 
@@ -262,6 +272,7 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg>
     <span>IATA<em>JUEGO</em></span>
   </div>
+  <div class="ticker" id="ticker" hidden title="Veces jugadas"><span class="tk-num" id="tkNum" role="status" aria-label="0 veces jugadas"></span><span class="tk-label">veces jugadas</span></div>
   <div class="rounds" id="rounds" aria-label="Progreso"></div>
   <div class="score"><span>PUNTOS</span><b id="total">0</b></div>
   <button class="iconbtn" id="menuBtn">Menú</button>
@@ -320,7 +331,6 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
           </div>
         </div>
       </div>
-      <p class="plays" id="playsBox" hidden><b id="playsN">0</b> partidas jugadas</p>
       <p class="note" id="menuErr" style="color:var(--bad);margin:6px 0 0"></p>
       <p class="note" id="rankMenuNote"></p>
       <button class="cta start" id="startBtn">Despegar</button>
@@ -1061,7 +1071,35 @@ function errText(e){
   return 'Algo salió mal. Volvé a empezar la partida.';
 }
 const STATS_API = 'https://iata-ranking-api.vercel.app/api/stats';
-function showPlays(n){ if (!(n > 0)) return; $('#playsN').textContent = Number(n).toLocaleString('es-AR'); $('#playsBox').hidden = false; }
+const ticker = {
+  txt: '', cols: [],
+  set(n){
+    const str = Number(n).toLocaleString('es-AR');
+    const box = $('#tkNum');
+    box.setAttribute('aria-label', str + ' veces jugadas');
+    if (str.length !== this.txt.length){
+      box.innerHTML = ''; this.cols = [];
+      [...str].forEach((ch, i) => {
+        if (/\d/.test(ch)){
+          const col = document.createElement('span'); col.className = 'tk-col';
+          const strip = document.createElement('span'); strip.className = 'tk-strip';
+          strip.style.transitionDelay = (i * 45) + 'ms';
+          for (let d = 0; d <= 9; d++){ const t = document.createElement('span'); t.textContent = d; strip.appendChild(t); }
+          col.appendChild(strip); box.appendChild(col); this.cols.push({ strip, i });
+        } else {
+          const sp = document.createElement('span'); sp.className = 'tk-sep'; sp.textContent = ch; box.appendChild(sp); this.cols.push(null);
+        }
+      });
+      this.txt = ' '.repeat(str.length);
+    }
+    setTimeout(() => {
+      [...str].forEach((ch, i) => { const c = this.cols[i]; if (c && /\d/.test(ch)) c.strip.style.transform = 'translateY(' + (-1.15 * Number(ch)) + 'em)'; });
+    }, 40);
+    this.txt = str;
+    $('#ticker').hidden = false;
+  }
+};
+function showPlays(n){ if (n >= 0) ticker.set(n); }
 function refreshPlays(){ fetch(STATS_API).then(r => r.json()).then(j => showPlays(j.plays)).catch(() => {}); }
 const setMenuMsg = t => { const el = $('#menuErr'); if (el) el.textContent = t || ''; };
 function fatal(e){
@@ -1472,7 +1510,7 @@ syncMenu(); renderHud();
 titleFlap.set('IATAJUEGO'); startPlanes(); refreshRankDock();
 setInterval(() => { if (S.phase === 'menu' && !$('#menu').hidden) titleFlap.set('IATAJUEGO'); }, 6000);
 // anonymous usage: a random id kept in this browser tells new visitors from returning ones
-refreshPlays();
+refreshPlays(); setInterval(refreshPlays, 20000);
 {
   let vid = '';
   try { vid = localStorage.getItem('iata:vid') || ''; if (!vid){ vid = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('iata:vid', vid); } } catch (e) {}
