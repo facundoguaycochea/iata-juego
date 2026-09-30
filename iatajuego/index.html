@@ -156,7 +156,11 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
 #startBtn:disabled{background:var(--panel2);color:var(--faint);cursor:not-allowed}
 .toast.warn{background:var(--amber);color:var(--amber-ink);max-width:min(92%,460px);text-align:center;line-height:1.25;padding:10px 16px;top:auto;bottom:140px;z-index:9;box-shadow:0 10px 30px rgba(0,0,0,.45)}
 .backhub{display:inline-block;margin-bottom:10px;font:500 12px var(--mono);letter-spacing:.08em;color:var(--muted);text-decoration:none}
-.backhub:hover{color:var(--amber)}
+.backhub{border:1px solid var(--line);border-radius:8px;padding:6px 12px;background:var(--panel2);color:var(--text);margin-bottom:12px}
+.backhub:hover{color:var(--amber);border-color:var(--amber)}
+a.brand{color:inherit;text-decoration:none}
+a.brand:hover{filter:brightness(1.15)}
+a.ghost{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;color:inherit}
 .opt{cursor:pointer}
 .opt text{font-size:14px;font-weight:700;pointer-events:none}
 
@@ -281,10 +285,10 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-
 
 <header class="bar">
   <div class="bar-l">
-    <div class="brand">
+    <a class="brand" href="../" id="brandLink" title="Volver a todos los juegos">
       <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg>
       <span>IATA<em>JUEGO</em></span>
-    </div>
+    </a>
     <div class="ticker" id="ticker" hidden title="Veces jugadas por usuarios"><span class="tk-num" id="tkNum" role="status" aria-label="0 veces jugadas por usuarios"></span><span class="tk-label">jugadas por usuarios</span></div>
   </div>
   <div class="rounds" id="rounds" aria-label="Progreso"></div>
@@ -1488,6 +1492,7 @@ function showSummary(){
       <button class="${done && !S.ranked ? 'cta' : 'ghost'}" id="shareBtn">Copiar resultado</button>
       <button class="ghost" id="againBtn">${done ? 'Jugar otra vez' : 'Empezar de nuevo'}</button>
       <button class="ghost" id="toMenuBtn">Menú</button>
+      <a class="ghost" href="../">Todos los juegos</a>
     </div>
     <textarea id="copyArea" readonly hidden></textarea>`;
   $('#summary').hidden = false;
@@ -1557,6 +1562,7 @@ function openMenu(){
 }
 $('#startBtn').onclick = startGame;
 $('#menuBtn').onclick = openMenu;
+$('#brandLink').addEventListener('click', e => { if (['loading', 'guess', 'hinting', 'sending', 'reveal'].includes(S.phase) && !confirm('Si salís ahora perdés esta partida. ¿Volver a todos los juegos?')) e.preventDefault(); });
 
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter' || e.target.tagName === 'BUTTON') return;
