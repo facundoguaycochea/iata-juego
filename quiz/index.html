@@ -304,20 +304,13 @@ a.ghost{display:inline-flex;align-items:center;justify-content:center;text-decor
   <section class="card" id="result" hidden></section>
 </main>
 <aside class="rankdock" id="rankDock" hidden>
-  <div class="rd-head"><span class="eyebrow">Ranking mundial · top 15</span><b id="rdBoard"></b></div>
-  <div class="rd-tabs">
-    <div class="rd-seg" id="rdMode"><button data-v="c2i">Ciudad→IATA</button><button data-v="i2c">IATA→Ciudad</button><button data-v="mix">Mezcla</button></div>
-    <div class="rd-seg" id="rdDiff"><button data-v="easy">Hubs</button><button data-v="mix">Mixto</button><button data-v="hard">Experto</button></div>
-  </div>
+  <div class="rd-head"><span class="eyebrow">Ranking mundial · top 15</span><b id="rdBoard">IATAQUIZ · general</b></div>
   <ol class="rank-list" id="rdList"><li class="empty">Cargando…</li></ol>
 </aside>
 <div class="rank-ov" id="rankOv" hidden>
   <div class="card">
     <div class="eyebrow">Ranking mundial · top 15</div>
-    <div class="field" style="margin-top:12px"><span>Qué preguntan</span>
-      <div class="seg" id="rkMode"><button data-v="c2i">Ciudad → IATA</button><button data-v="i2c">IATA → Ciudad</button><button data-v="mix">Mezclado</button></div></div>
-    <div class="field"><span>Dificultad</span>
-      <div class="seg" id="rkDiff"><button data-v="easy">Grandes hubs</button><button data-v="mix">Mixto</button><button data-v="hard">Experto</button></div></div>
+    <p class="hint" style="text-align:left;margin:8px 0 0">Un solo ranking para todos: sin importar el modo, la dificultad ni el dispositivo.</p>
     <ol class="rank-list" id="rkList"></ol>
     <button class="ghost wide" id="rkClose">Volver</button>
   </div>
@@ -576,7 +569,7 @@ function showLimit(until){
 
 /* ---------- ranking ---------- */
 const RANK_TOP = 15;
-const boardKey = (mode, diff) => `q-${mode}:${diff}`;
+const QBOARD = 'q-all';   // one ranking for everybody
 const rankStore = { async load(key){ try { const r = await fetch(`${API}/ranking?board=${encodeURIComponent(key)}`); if (r.ok) return await r.json(); } catch (e) {} return []; } };
 function rankHtml(list, mine){
   if (!list.length) return '<li class="empty">Todavía no hay puntajes. Serás el primero.</li>';
@@ -586,34 +579,22 @@ let rdView = null;
 const dockBase = () => (S.phase === 'menu' ? prefs : S);
 const curView = () => rdView || { mode: dockBase().mode, diff: dockBase().diff };
 const setDock = patch => { rdView = Object.assign({}, curView(), patch); refreshRankDock(); };
-document.querySelectorAll('#rdMode button').forEach(b => b.onclick = () => setDock({ mode: b.dataset.v }));
-document.querySelectorAll('#rdDiff button').forEach(b => b.onclick = () => setDock({ diff: b.dataset.v }));
 async function refreshRankDock(){
   const dock = $('#rankDock'), inMenu = S.phase === 'menu';
   const show = innerWidth >= 1100 && S.phase !== 'done' && (inMenu || innerWidth >= 1300);
   dock.hidden = !show; if (!show) return;
-  const v = curView(), key = boardKey(v.mode, v.diff);
-  document.querySelectorAll('#rdMode button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === v.mode)));
-  document.querySelectorAll('#rdDiff button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === v.diff)));
-  $('#rdBoard').textContent = MODE_LABEL[v.mode] + ' · ' + DIFF_LABEL[v.diff];
-  const list = await rankStore.load(key), now = curView();
-  if (key === boardKey(now.mode, now.diff)) $('#rdList').innerHTML = rankHtml(list, S.rankRes && S.rankRes.entry && S.rankRes.entry.id);
+  const list = await rankStore.load(QBOARD);
+  $('#rdList').innerHTML = rankHtml(list, S.rankRes && S.rankRes.entry && S.rankRes.entry.id);
 }
 setInterval(refreshRankDock, 20000);
 addEventListener('resize', () => refreshRankDock());
-const RK = { mode: 'mix', diff: 'mix' };
-async function openRanking(p){
-  Object.assign(RK, p || {});
+async function openRanking(){
   $('#rankOv').hidden = false;
-  [['rkMode', 'mode'], ['rkDiff', 'diff']].forEach(([id, k]) => document.querySelectorAll('#' + id + ' button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === RK[k]))));
   $('#rkList').innerHTML = '<li class="empty">Cargando…</li>';
-  const key = boardKey(RK.mode, RK.diff), list = await rankStore.load(key);
-  if (key === boardKey(RK.mode, RK.diff)) $('#rkList').innerHTML = rankHtml(list);
+  $('#rkList').innerHTML = rankHtml(await rankStore.load(QBOARD));
 }
-document.querySelectorAll('#rkMode button').forEach(b => b.onclick = () => openRanking({ mode: b.dataset.v }));
-document.querySelectorAll('#rkDiff button').forEach(b => b.onclick = () => openRanking({ diff: b.dataset.v }));
 $('#rkClose').onclick = () => { $('#rankOv').hidden = true; };
-$('#rankBtn').onclick = () => openRanking({ mode: prefs.mode, diff: prefs.diff });
+$('#rankBtn').onclick = () => openRanking();
 
 /* ---------- HUD ---------- */
 function renderHud(){
@@ -739,7 +720,7 @@ function showResult(){
        <p class="rank" style="color:var(--good)">Nivel ${S.level} superado</p>
        <p class="hint" style="text-align:left;margin:-8px 0 14px">Necesitás ${NEED} de 5 para seguir. Puntos hasta ahora: ${run}</p>`;
   const save = done ? `
-    <div class="save"><div class="eyebrow">Ranking mundial · ${MODE_LABEL[S.mode]} · ${DIFF_LABEL[S.diff]}</div>
+    <div class="save"><div class="eyebrow">Ranking mundial de IATAQUIZ</div>
       <p class="hint" id="saveMsg" style="text-align:left;margin:8px 0 6px">Guardando a <b>${esc(S.nick)}</b>…</p>
       <ol class="rank-list" id="sumRank"></ol></div>` : '';
   $('#result').innerHTML = `
@@ -787,7 +768,7 @@ function showResult(){
 /* ---------- menu ---------- */
 function syncMenu(){
   document.querySelectorAll('#menu .seg').forEach(seg => seg.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(prefs[seg.dataset.key] === b.dataset.v))));
-  $('#menuInfo').textContent = 'Esta partida entra al ranking: ' + MODE_LABEL[prefs.mode] + ' · ' + DIFF_LABEL[prefs.diff];
+  $('#menuInfo').textContent = 'Esta partida entra al ranking general de IATAQUIZ.';
   refreshRankDock();
 }
 document.querySelectorAll('#menu .seg').forEach(seg => seg.addEventListener('click', e => {
