@@ -673,6 +673,7 @@ AIRPORTS.forEach(a => { a.v = toVec([a.lon, a.lat]); });
 let cvec = toVec(centre());
 const facingV = v => v[0] * cvec[0] + v[1] * cvec[1] + v[2] * cvec[2] > 0.02;
 const facing = ll => { cvec = toVec(centre()); return facingV(toVec(ll)); };
+let spinRAF = 0, samples = [];   // rotational inertia state
 let interacting = false, idleT = 0, hoverA = null, dotRegion = 'all', dotDiff = 'mix';
 const DIFF_TIERS = { easy: [1], mix: [1, 2, 3], hard: [2, 3] };
 const inRegion = a => (dotRegion === 'all' || a.region === dotRegion) && DIFF_TIERS[dotDiff].includes(a.tier);
@@ -885,7 +886,7 @@ function layout(){
 
 let anim = 0;
 function animateTo(t, dur = 900){
-  cancelAnimationFrame(anim);
+  cancelAnimationFrame(anim); stopSpin();
   const from = { rot: [...V.rot], k: V.k, cx: V.cx, cy: V.cy };
   const dl = ((t.rot[0] - from.rot[0] + 540) % 360) - 180;
   const to = { rot: [from.rot[0] + dl, Math.max(-90, Math.min(90, t.rot[1]))], k: t.k, cx: t.cx, cy: t.cy };
@@ -927,10 +928,32 @@ function resetView(){
 /* input: drag to spin, wheel / pinch to zoom, tap to place */
 const ptrs = new Map(); let tap = null, pinch = 0;
 const clampK = k => Math.max(1, Math.min(40, k));
+
+/* rotational inertia: after a flick the globe keeps turning and slows down gradually */
+const SPIN_TAU = 0.62, SPIN_MAX = 420;   // glide time constant (s) and top speed (degrees per second)
+function stopSpin(){ cancelAnimationFrame(spinRAF); spinRAF = 0; }
+function startSpin(vl, vp){
+  stopSpin();
+  const sp = Math.hypot(vl, vp);
+  if (sp < 12 || REDUCE) return;
+  const cap = Math.min(1, SPIN_MAX / sp), v = { l: vl * cap, p: vp * cap };
+  let last = performance.now();
+  const step = now => {
+    const dt = Math.min(.05, (now - last) / 1000); last = now;
+    V.rot = [V.rot[0] + v.l * dt, Math.max(-90, Math.min(90, V.rot[1] + v.p * dt))];
+    if (Math.abs(V.rot[1]) >= 90) v.p = 0;
+    const f = Math.exp(-dt / SPIN_TAU); v.l *= f; v.p *= f;
+    touch(); draw();
+    if (Math.hypot(v.l, v.p) > 3) spinRAF = requestAnimationFrame(step);
+    else { spinRAF = 0; interacting = false; render(); }
+  };
+  spinRAF = requestAnimationFrame(step);
+}
 cv.addEventListener('pointerdown', e => {
   cancelAnimationFrame(anim); cv.setPointerCapture(e.pointerId);
+  const wasSpinning = !!spinRAF; stopSpin(); samples = [];   // touching a spinning globe just stops it
   ptrs.set(e.pointerId, { x: (e.clientX - cv.getBoundingClientRect().left), y: (e.clientY - cv.getBoundingClientRect().top) });
-  tap = ptrs.size === 1 ? { x: (e.clientX - cv.getBoundingClientRect().left), y: (e.clientY - cv.getBoundingClientRect().top), moved: 0 } : null;
+  tap = (ptrs.size === 1 && !wasSpinning) ? { x: (e.clientX - cv.getBoundingClientRect().left), y: (e.clientY - cv.getBoundingClientRect().top), moved: 0 } : null;
   if (ptrs.size === 2){ const [a, b] = [...ptrs.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); }
 });
 function updateHover(x, y){
@@ -947,6 +970,8 @@ cv.addEventListener('pointermove', e => {
     if (tap) tap.moved += Math.abs(dx) + Math.abs(dy);
     const r = R0 * V.k, f = 57.2958 / r;
     V.rot = [V.rot[0] + dx * f, Math.max(-90, Math.min(90, V.rot[1] - dy * f))];
+    const now = performance.now(); samples.push({ t: now, dl: dx * f, dp: -dy * f });
+    while (samples.length && now - samples[0].t > 110) samples.shift();
   } else if (ptrs.size === 2){
     const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
     if (pinch) V.k = clampK(V.k * d / pinch);
@@ -956,12 +981,21 @@ cv.addEventListener('pointermove', e => {
 });
 const endPtr = e => {
   const wasTap = tap && tap.moved < 6 && ptrs.size === 1 && e.type === 'pointerup';
+  // a quick flick keeps the globe turning: speed = movement of the last ~0.1 s
+  if (ptrs.size === 1 && e.type === 'pointerup' && samples.length >= 2){
+    const now = performance.now(), first = samples[0], lastS = samples[samples.length - 1];
+    if (now - lastS.t < 90){
+      const span = Math.max(16, now - first.t) / 1000;
+      startSpin(samples.reduce((a, q) => a + q.dl, 0) / span, samples.reduce((a, q) => a + q.dp, 0) / span);
+    }
+  }
+  samples = [];
   ptrs.delete(e.pointerId); pinch = 0;
   if (wasTap) handleTap((e.clientX - cv.getBoundingClientRect().left), (e.clientY - cv.getBoundingClientRect().top));
   tap = null;
 };
 cv.addEventListener('pointerup', endPtr); cv.addEventListener('pointercancel', endPtr);
-cv.addEventListener('wheel', e => { e.preventDefault(); cancelAnimationFrame(anim); touch(); V.k = clampK(V.k * Math.exp(-e.deltaY * .0016)); render(); }, { passive: false });
+cv.addEventListener('wheel', e => { e.preventDefault(); cancelAnimationFrame(anim); stopSpin(); touch(); V.k = clampK(V.k * Math.exp(-e.deltaY * .0016)); render(); }, { passive: false });
 
 function handleTap(x, y){
   if (S.hint && S.phase === 'guess'){
