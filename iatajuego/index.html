@@ -930,7 +930,7 @@ const ptrs = new Map(); let tap = null, pinch = 0;
 const clampK = k => Math.max(1, Math.min(40, k));
 
 /* rotational inertia: after a flick the globe keeps turning and slows down gradually */
-const SPIN_TAU = 0.62, SPIN_MAX = 420;   // glide time constant (s) and top speed (degrees per second)
+const SPIN_TAU = 0.42, SPIN_MAX = 300;   // glide time constant (s) and top speed (degrees per second)
 function stopSpin(){ cancelAnimationFrame(spinRAF); spinRAF = 0; }
 function startSpin(vl, vp){
   stopSpin();
