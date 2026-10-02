@@ -226,6 +226,24 @@ a.ghost{display:inline-flex;align-items:center;justify-content:center;text-decor
   .score b{font-size:19px}
   .iconbtn{flex-shrink:0;padding:6px 9px;font-size:13px;min-height:34px;border-color:rgba(255,178,36,.6);color:var(--amber)}
 }
+
+/* on-screen keyboard: the page follows the visible area and the question is compacted */
+html.kb body{position:fixed;left:0;right:0;top:var(--vvtop,0px);height:var(--vvh,100%)}
+html.kb main{padding:8px 12px}
+html.kb .sky,html.kb .credit-m,html.kb .backhub{display:none}
+html.kb .board{padding:8px 10px 10px}
+html.kb .board-top{margin-bottom:4px}
+html.kb .timer{margin-bottom:6px}
+html.kb .flaps{min-height:0;gap:6px 10px}
+html.kb .cell{--c:min(var(--cw,58px),30px);width:var(--c);height:calc(var(--c) * 1.28);font-size:calc(var(--c) * .86)}
+html.kb .sub{margin-top:4px;font-size:16px;min-height:0}
+html.kb .sub small{display:none}
+html.kb .answer{margin-top:8px;gap:8px}
+html.kb .slot{width:48px;height:62px;font-size:38px}
+html.kb .cityin{padding:10px 12px;font-size:22px}
+html.kb .actions .cta{padding:10px 18px}
+html.kb .fb{margin-top:8px;padding:10px}
+html.kb .fb .pts{font-size:30px}
 </style>
 
 <header class="bar">
@@ -255,7 +273,7 @@ a.ghost{display:inline-flex;align-items:center;justify-content:center;text-decor
     <div class="hero"><div id="titleFlap" role="img" aria-label="IATAQUIZ"></div></div>
     <p class="tag">Te damos una ciudad y escribís su código IATA. O te damos el código y escribís la ciudad.</p>
     <div class="field"><span>Tu nick o nombre (para el ranking)</span>
-      <input id="nickIn" maxlength="14" placeholder="Ej: Facu" autocomplete="nickname"></div>
+      <input id="nickIn" name="q-n1" type="text" maxlength="14" placeholder="Ej: Facu" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="done" data-lpignore="true" data-1p-ignore="true" data-form-type="other"></div>
     <div class="field"><span>Qué te preguntamos</span>
       <div class="seg" data-key="mode">
         <button data-v="c2i">Ciudad → IATA</button>
@@ -297,9 +315,9 @@ a.ghost{display:inline-flex;align-items:center;justify-content:center;text-decor
     <div class="answer" id="answer">
       <div class="slots" id="slots" hidden>
         <span class="slot"></span><span class="slot"></span><span class="slot"></span>
-        <input id="codeIn" maxlength="3" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text" aria-label="Código IATA de 3 letras">
+        <input id="codeIn" name="q-r1" type="text" maxlength="3" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" inputmode="text" enterkeyhint="go" data-lpignore="true" data-1p-ignore="true" data-form-type="other" aria-label="Tres letras de la respuesta">
       </div>
-      <input class="cityin" id="cityIn" maxlength="40" placeholder="Escribí la ciudad" autocomplete="off" spellcheck="false" hidden aria-label="Nombre de la ciudad">
+      <input class="cityin" id="cityIn" name="q-r2" type="text" maxlength="40" placeholder="Escribí tu respuesta" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="go" data-lpignore="true" data-1p-ignore="true" data-form-type="other" hidden aria-label="Tu respuesta">
       <div class="hint" id="hintTxt"></div>
       <div class="actions">
         <button class="cta" id="okBtn" disabled>Confirmar</button>
@@ -810,6 +828,26 @@ document.addEventListener('keydown', e => {
   if (S.phase === 'ask' && !$('#okBtn').disabled) submit(false, false);
   else if (S.phase === 'reveal') nextQuestion();
 });
+
+/* ---------- on-screen keyboard: keep the answer boxes visible ---------- */
+const vv = window.visualViewport;
+function fitKeyboard(){
+  if (!vv) return;
+  const open = innerHeight - vv.height > 120;   // the keyboard takes more than ~120 px
+  const root = document.documentElement;
+  root.classList.toggle('kb', open);
+  root.style.setProperty('--vvh', vv.height + 'px');
+  root.style.setProperty('--vvtop', vv.offsetTop + 'px');
+  if (open){
+    window.scrollTo(0, 0);
+    const el = S.phase === 'ask' ? ($('#slots').hidden ? $('#cityIn') : $('#slots')) : null;
+    if (el) setTimeout(() => el.scrollIntoView({ block: 'nearest' }), 30);
+    // the question that is being asked must stay on screen above the keyboard
+    const play = $('#play'); if (!play.hidden) $('main').scrollTop = 0;
+  }
+}
+if (vv){ vv.addEventListener('resize', fitKeyboard); vv.addEventListener('scroll', fitKeyboard); }
+addEventListener('orientationchange', () => setTimeout(fitKeyboard, 300));
 
 /* ---------- boot ---------- */
 $('#nickIn').value = store.get('iata:nick') || '';
